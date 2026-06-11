@@ -272,10 +272,7 @@ export default function Navbar() {
         .nav-link:hover {
           color: var(--text-main);
         }
-        .nav-link.active {
-          color: var(--primary);
-        }
-        .nav-link.active::after {
+        .nav-link::after {
           content: '';
           position: absolute;
           bottom: -4px;
@@ -284,6 +281,20 @@ export default function Navbar() {
           height: 2px;
           background: var(--primary);
           border-radius: 99px;
+          transform: scaleX(0);
+          transform-origin: right;
+          transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .nav-link:hover::after {
+          transform: scaleX(1);
+          transform-origin: left;
+        }
+        .nav-link.active {
+          color: var(--primary);
+        }
+        .nav-link.active::after {
+          transform: scaleX(1);
+          transform-origin: left;
         }
         @media (max-width: 768px) {
           .desktop-menu {

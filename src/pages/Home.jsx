@@ -111,7 +111,7 @@ export default function Home() {
                       letterSpacing: "0.1em",
                       marginBottom: "20px"
                     }}>
-                      <Sparkles size={14} className="gradient-text" /> Exclusive Selection
+                      <Sparkles size={14} color="var(--accent)" fill="var(--accent)" style={{ opacity: 0.85 }} /> Exclusive Selection
                     </span>
                     <h1 style={{
                       fontFamily: "var(--font-heading)",
@@ -288,11 +288,11 @@ export default function Home() {
               gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
               gap: "24px"
             }}>
-              {categories.map((cat) => (
+              {categories.map((cat, index) => (
                 <Link
                   key={cat.id}
                   to={`/shop?category=${cat.id}`}
-                  className="glass-card"
+                  className={`glass-card fade-in-up delay-${(index % 8) + 1}`}
                   style={{
                     display: "flex",
                     flexDirection: "column",
@@ -347,8 +347,8 @@ export default function Home() {
               gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
               gap: "30px"
             }}>
-              {latestProducts.map((product) => (
-                <div key={product.id} className="fade-in-up">
+              {latestProducts.map((product, index) => (
+                <div key={product.id} className={`fade-in-up delay-${(index % 8) + 1}`}>
                   <ProductCard product={product} />
                 </div>
               ))}

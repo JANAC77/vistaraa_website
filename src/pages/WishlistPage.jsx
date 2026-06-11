@@ -34,8 +34,8 @@ export default function WishlistPage() {
 
         {wishlistCount > 0 ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "24px" }} className="shop-products-grid">
-            {wishlist.map((product) => (
-              <div key={product.id} className="fade-in-up">
+            {wishlist.map((product, index) => (
+              <div key={product.id} className={`fade-in-up delay-${(index % 8) + 1}`}>
                 <ProductCard product={product} />
               </div>
             ))}

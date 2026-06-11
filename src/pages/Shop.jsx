@@ -371,8 +371,8 @@ export default function Shop() {
               </div>
             ) : processedProducts.length > 0 ? (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "24px" }} className="shop-products-grid">
-                {processedProducts.map((product) => (
-                  <div key={product.id} className="fade-in-up">
+                {processedProducts.map((product, index) => (
+                  <div key={product.id} className={`fade-in-up delay-${(index % 8) + 1}`}>
                     <ProductCard product={product} />
                   </div>
                 ))}

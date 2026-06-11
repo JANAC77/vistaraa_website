@@ -108,6 +108,34 @@ export default function ProductDetails() {
     setTimeout(() => setAdded(false), 2000);
   };
 
+  const handleBuyNow = () => {
+    if (isOutOfStock) return;
+
+    const variantKey = selectedVariant ? selectedVariant.sku || selectedVariant.size : "default";
+    const priceToUse = selectedVariant ? Number(selectedVariant.price) : Number(product.salePrice || product.price || 0);
+
+    const getProductImage = (p) => {
+      if (!p?.images?.length) return getPlaceholderImage(400, 400, "Product");
+      const primary = p.images.find(img => img.isPrimary);
+      return primary?.url || p.images[0]?.url;
+    };
+
+    const buyNowItem = {
+      id: product.id,
+      name: product.name,
+      price: Number(product.price || 0),
+      salePrice: priceToUse,
+      image: getProductImage(product),
+      sku: selectedVariant ? selectedVariant.sku : (product.sku || product.id),
+      variantKey,
+      variantSize: selectedVariant ? selectedVariant.size : null,
+      sellerId: product.sellerId || "default",
+      quantity,
+    };
+
+    navigate("/checkout", { state: { buyNowItem } });
+  };
+
   return (
     <div style={{ paddingTop: "120px", paddingBottom: "80px" }}>
       <div className="container">
@@ -240,85 +268,109 @@ export default function ProductDetails() {
             )}
 
             {/* Purchase Control Section */}
-            <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
-              {/* Quantity selectors */}
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                border: "1px solid var(--border-color)",
-                borderRadius: "16px",
-                padding: "4px",
-                background: "var(--bg-card)"
-              }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Row 1: Quantity and Wishlist */}
+              <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+                {/* Quantity selectors */}
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  border: "1px solid var(--border-color)",
+                  borderRadius: "16px",
+                  padding: "4px",
+                  background: "var(--bg-card)"
+                }}>
+                  <button
+                    onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                    style={{ width: "40px", height: "40px", border: "none", background: "none", cursor: "pointer", fontSize: "18px", fontWeight: "700" }}
+                  >
+                    -
+                  </button>
+                  <span style={{ width: "32px", textAlign: "center", fontWeight: "700" }}>{quantity}</span>
+                  <button
+                    onClick={() => setQuantity(q => q + 1)}
+                    style={{ width: "40px", height: "40px", border: "none", background: "none", cursor: "pointer", fontSize: "18px", fontWeight: "700" }}
+                  >
+                    +
+                  </button>
+                </div>
+
+                {/* Wishlist toggle button */}
                 <button
-                  onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                  style={{ width: "40px", height: "40px", border: "none", background: "none", cursor: "pointer", fontSize: "18px", fontWeight: "700" }}
+                  onClick={() => toggleWishlist(product)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "50px",
+                    height: "50px",
+                    borderRadius: "16px",
+                    border: "1px solid var(--border-color)",
+                    background: "var(--bg-card)",
+                    color: isInWishlist(product.id) ? "var(--error)" : "var(--text-muted)",
+                    cursor: "pointer",
+                    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                    flexShrink: 0
+                  }}
+                  className="details-wishlist-btn"
+                  title={isInWishlist(product.id) ? "Remove from Wishlist" : "Add to Wishlist"}
                 >
-                  -
-                </button>
-                <span style={{ width: "32px", textAlign: "center", fontWeight: "700" }}>{quantity}</span>
-                <button
-                  onClick={() => setQuantity(q => q + 1)}
-                  style={{ width: "40px", height: "40px", border: "none", background: "none", cursor: "pointer", fontSize: "18px", fontWeight: "700" }}
-                >
-                  +
+                  <Heart size={20} fill={isInWishlist(product.id) ? "var(--error)" : "none"} />
                 </button>
               </div>
 
-              {/* Add to Cart button */}
-              <button
-                onClick={handleAddToCart}
-                disabled={isOutOfStock}
-                className={`btn ${added ? "btn-secondary" : "btn-primary"}`}
-                style={{
-                  flexGrow: 1,
-                  padding: "16px",
-                  borderRadius: "16px",
-                  fontSize: "16px",
-                  background: isOutOfStock ? "var(--border-color)" : (added ? "var(--success)" : undefined),
-                  color: added ? "white" : undefined,
-                  cursor: isOutOfStock ? "not-allowed" : "pointer"
-                }}
-              >
-                {isOutOfStock ? (
-                  "Sold Out"
-                ) : added ? (
-                  <>
-                    <Check size={18} /> Added to Cart!
-                  </>
-                ) : (
-                  <>
-                    <ShoppingCart size={18} /> Add to Cart
-                  </>
-                )}
-              </button>
+              {/* Row 2: Add to Cart and Buy Now Buttons */}
+              <div style={{ display: "flex", gap: "16px" }}>
+                {/* Add to Cart button */}
+                <button
+                  onClick={handleAddToCart}
+                  disabled={isOutOfStock}
+                  className={`btn ${added ? "btn-secondary" : "btn-secondary"}`}
+                  style={{
+                    flex: 1,
+                    padding: "16px",
+                    borderRadius: "16px",
+                    fontSize: "15px",
+                    background: isOutOfStock ? "var(--border-color)" : (added ? "var(--success)" : "var(--bg-card)"),
+                    color: added ? "white" : "var(--text-main)",
+                    cursor: isOutOfStock ? "not-allowed" : "pointer",
+                    border: added ? "none" : "1px solid var(--border-color)"
+                  }}
+                >
+                  {isOutOfStock ? (
+                    "Sold Out"
+                  ) : added ? (
+                    <>
+                      <Check size={18} /> Added!
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart size={18} /> Add to Cart
+                    </>
+                  )}
+                </button>
 
-              {/* Wishlist toggle button */}
-              <button
-                onClick={() => toggleWishlist(product)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: "56px",
-                  height: "56px",
-                  borderRadius: "16px",
-                  border: "1px solid var(--border-color)",
-                  background: "var(--bg-card)",
-                  color: isInWishlist(product.id) ? "var(--error)" : "var(--text-muted)",
-                  cursor: "pointer",
-                  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-                  flexShrink: 0
-                }}
-                className="details-wishlist-btn"
-                title={isInWishlist(product.id) ? "Remove from Wishlist" : "Add to Wishlist"}
-              >
-                <Heart size={20} fill={isInWishlist(product.id) ? "var(--error)" : "none"} />
-              </button>
+                {/* Buy Now button */}
+                <button
+                  onClick={handleBuyNow}
+                  disabled={isOutOfStock}
+                  className="btn btn-primary"
+                  style={{
+                    flex: 1,
+                    padding: "16px",
+                    borderRadius: "16px",
+                    fontSize: "15px",
+                    background: isOutOfStock ? "var(--border-color)" : undefined,
+                    cursor: isOutOfStock ? "not-allowed" : "pointer"
+                  }}
+                >
+                  Buy Now
+                </button>
+              </div>
             </div>
 
             {/* Shipping Info Card */}
-            <div style={{ padding: "16px", border: "1px solid var(--border-color)", borderRadius: "18px", background: "rgba(99, 102, 241, 0.04)" }}>
+            <div style={{ padding: "16px", border: "1px solid var(--border-color)", borderRadius: "18px", background: "var(--primary-glow)" }}>
               <div style={{ display: "flex", gap: "12px", alignItems: "center", color: "var(--primary)" }}>
                 <Truck size={18} />
                 <span style={{ fontSize: "13px", fontWeight: "700" }}>Shiprocket Courier Serviceability</span>

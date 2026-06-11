@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { auth, db } from "../firebase";
 import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -11,6 +11,11 @@ const BACKEND_API_URL = "http://localhost:3000"; // Default local backend API UR
 export default function Checkout() {
   const { cart, cartTotal, clearCart } = useCart();
   const navigate = useNavigate();
+  const location = useLocation();
+  const buyNowItem = location.state?.buyNowItem;
+
+  const checkoutItems = buyNowItem ? [buyNowItem] : cart;
+  const checkoutTotal = buyNowItem ? (buyNowItem.salePrice * buyNowItem.quantity) : cartTotal;
 
   const [formData, setFormData] = useState({
     name: "",
@@ -46,10 +51,10 @@ export default function Checkout() {
     }));
   }, [navigate]);
 
-  if (cart.length === 0 && !orderPlaced) {
+  if (checkoutItems.length === 0 && !orderPlaced) {
     return (
       <div style={{ paddingTop: "140px", paddingBottom: "100px", textAlign: "center" }}>
-        <h2>Your Cart is Empty</h2>
+        <h2>Your Checkout is Empty</h2>
         <button onClick={() => navigate("/shop")} className="btn btn-primary" style={{ marginTop: "16px" }}>Back to Shop</button>
       </div>
     );
@@ -75,7 +80,7 @@ export default function Checkout() {
     setShippingError("");
 
     // Calculate total weight of cart items (0.5kg default per item)
-    const totalWeight = cart.reduce((acc, curr) => acc + (0.5 * curr.quantity), 0);
+    const totalWeight = checkoutItems.reduce((acc, curr) => acc + (0.5 * curr.quantity), 0);
 
     try {
       // API call to backend shipping calculation endpoint
@@ -139,7 +144,7 @@ export default function Checkout() {
   // Helper to save order details to Firestore and sync to backend API
   const saveOrderDetails = async (orderId, paymentId = "COD", paymentStatus = "COD") => {
     const { name, phone, email, address, city, state, pincode } = formData;
-    const finalAmount = cartTotal + shippingCharges;
+    const finalAmount = checkoutTotal + shippingCharges;
     const user = auth.currentUser;
 
     const newOrderRef = doc(collection(db, "users", user.uid, "orders"), orderId);
@@ -161,7 +166,7 @@ export default function Checkout() {
       status: paymentStatus,
       orderStatus: "placed",
       shiprocketStatus: "NEW",
-      products: cart.map(item => ({
+      products: checkoutItems.map(item => ({
         id: item.id,
         name: item.name,
         price: item.price,
@@ -201,14 +206,14 @@ export default function Checkout() {
           billing_email: email,
           billing_phone: phone,
           shipping_is_billing: true,
-          order_items: cart.map(item => ({
+          order_items: checkoutItems.map(item => ({
             name: item.name,
             sku: item.sku,
             units: item.quantity,
             selling_price: item.salePrice
           })),
           payment_method: paymentStatus,
-          sub_total: cartTotal,
+          sub_total: checkoutTotal,
           length: 10,
           breadth: 10,
           height: 10,
@@ -222,7 +227,9 @@ export default function Checkout() {
     // 3. Complete checkout states
     setPlacedOrderId(orderId);
     setOrderPlaced(true);
-    clearCart();
+    if (!buyNowItem) {
+      clearCart();
+    }
   };
 
   // 2. CHECKOUT & ORDER CREATION FLOW
@@ -241,7 +248,7 @@ export default function Checkout() {
     }
 
     setLoading(true);
-    const finalAmount = cartTotal + shippingCharges;
+    const finalAmount = checkoutTotal + shippingCharges;
     const orderId = `VIST-${Date.now()}`;
 
     if (paymentMethod === "COD") {
@@ -439,7 +446,7 @@ export default function Checkout() {
                     onClick={() => handlePaymentMethodChange("Prepaid")}
                     style={{
                       border: paymentMethod === "Prepaid" ? "2px solid var(--primary)" : "1px solid var(--border-color)",
-                      background: paymentMethod === "Prepaid" ? "rgba(99, 102, 241, 0.05)" : "transparent",
+                      background: paymentMethod === "Prepaid" ? "var(--primary-glow)" : "transparent",
                       borderRadius: "16px",
                       padding: "20px",
                       cursor: "pointer",
@@ -473,7 +480,7 @@ export default function Checkout() {
                     onClick={() => handlePaymentMethodChange("COD")}
                     style={{
                       border: paymentMethod === "COD" ? "2px solid var(--primary)" : "1px solid var(--border-color)",
-                      background: paymentMethod === "COD" ? "rgba(99, 102, 241, 0.05)" : "transparent",
+                      background: paymentMethod === "COD" ? "var(--primary-glow)" : "transparent",
                       borderRadius: "16px",
                       padding: "20px",
                       cursor: "pointer",
@@ -517,7 +524,7 @@ export default function Checkout() {
             <div style={{ display: "flex", flexDirection: "column", gap: "16px", fontSize: "14px" }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ color: "var(--text-muted)" }}>Items Subtotal</span>
-                <span style={{ fontWeight: "700" }}>₹{cartTotal.toLocaleString()}</span>
+                <span style={{ fontWeight: "700" }}>₹{checkoutTotal.toLocaleString()}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ color: "var(--text-muted)" }}>Shipping Fee</span>
@@ -531,7 +538,7 @@ export default function Checkout() {
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "18px", fontWeight: "800" }}>
                 <span>Final Amount</span>
                 <span style={{ color: "var(--primary)" }}>
-                  ₹{(cartTotal + (shippingCharges || 0)).toLocaleString()}
+                  ₹{(checkoutTotal + (shippingCharges || 0)).toLocaleString()}
                 </span>
               </div>
 
