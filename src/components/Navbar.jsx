@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { ShoppingBag, User, Sun, Moon, Menu, X, LogOut } from "lucide-react";
+import { ShoppingBag, Heart, User, Sun, Moon, Menu, X, LogOut } from "lucide-react";
 import { useCart } from "../context/CartContext";
+import { useWishlist } from "../context/WishlistContext";
 import { auth } from "../firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import Logo from "./Logo";
 
 export default function Navbar() {
   const { cartCount } = useCart();
+  const { wishlistCount } = useWishlist();
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [scrolled, setScrolled] = useState(false);
@@ -91,6 +93,38 @@ export default function Navbar() {
           }} title="Toggle Theme">
             {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
           </button>
+
+          {/* Wishlist Icon */}
+          <Link to="/wishlist" style={{
+            position: "relative",
+            padding: "8px",
+            borderRadius: "12px",
+            color: "var(--text-main)",
+            display: "flex",
+            alignItems: "center"
+          }} title="My Wishlist">
+            <Heart size={20} />
+            {wishlistCount > 0 && (
+              <span style={{
+                position: "absolute",
+                top: "0",
+                right: "0",
+                background: "var(--accent)",
+                color: "white",
+                fontSize: "10px",
+                fontWeight: "800",
+                borderRadius: "50%",
+                width: "18px",
+                height: "18px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 2px 5px rgba(244, 63, 94, 0.4)"
+              }}>
+                {wishlistCount}
+              </span>
+            )}
+          </Link>
 
           {/* Cart Icon */}
           <Link to="/cart" style={{
@@ -202,6 +236,9 @@ export default function Navbar() {
           <nav style={{ display: "flex", flexDirection: "column", gap: "24px", fontSize: "20px", fontWeight: "700" }}>
             <Link to="/" onClick={() => setMobileMenuOpen(false)}>Home</Link>
             <Link to="/shop" onClick={() => setMobileMenuOpen(false)}>Shop</Link>
+            <Link to="/wishlist" onClick={() => setMobileMenuOpen(false)} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              Wishlist {wishlistCount > 0 && <span style={{ fontSize: "14px", color: "var(--accent)", fontWeight: "800" }}>({wishlistCount})</span>}
+            </Link>
             {user && <Link to="/dashboard" onClick={() => setMobileMenuOpen(false)}>My Orders</Link>}
             {!user && <Link to="/auth" onClick={() => setMobileMenuOpen(false)}>Sign In</Link>}
           </nav>

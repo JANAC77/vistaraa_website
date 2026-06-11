@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useCart } from "../context/CartContext";
+import { useWishlist } from "../context/WishlistContext";
 import { ShoppingCart, Heart, Truck, Check, RefreshCcw, ArrowLeft, Star } from "lucide-react";
 import { getPlaceholderImage } from "../utils/placeholder";
 
@@ -10,6 +11,7 @@ export default function ProductDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart } = useCart();
+  const { toggleWishlist, isInWishlist } = useWishlist();
 
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -290,6 +292,29 @@ export default function ProductDetails() {
                   </>
                 )}
               </button>
+
+              {/* Wishlist toggle button */}
+              <button
+                onClick={() => toggleWishlist(product)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "56px",
+                  height: "56px",
+                  borderRadius: "16px",
+                  border: "1px solid var(--border-color)",
+                  background: "var(--bg-card)",
+                  color: isInWishlist(product.id) ? "var(--error)" : "var(--text-muted)",
+                  cursor: "pointer",
+                  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                  flexShrink: 0
+                }}
+                className="details-wishlist-btn"
+                title={isInWishlist(product.id) ? "Remove from Wishlist" : "Add to Wishlist"}
+              >
+                <Heart size={20} fill={isInWishlist(product.id) ? "var(--error)" : "none"} />
+              </button>
             </div>
 
             {/* Shipping Info Card */}
@@ -369,6 +394,15 @@ export default function ProductDetails() {
             grid-template-columns: 1fr !important;
             gap: 40px !important;
           }
+        }
+        .details-wishlist-btn:hover {
+          transform: translateY(-2px);
+          border-color: var(--card-border-hover);
+          color: var(--error) !important;
+          box-shadow: var(--shadow-sm);
+        }
+        .details-wishlist-btn:active {
+          transform: translateY(0);
         }
       `}</style>
     </div>

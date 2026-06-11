@@ -1,11 +1,13 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { ShoppingCart, Eye, Flame } from "lucide-react";
+import { ShoppingCart, Eye, Flame, Heart } from "lucide-react";
 import { useCart } from "../context/CartContext";
+import { useWishlist } from "../context/WishlistContext";
 import { getPlaceholderImage } from "../utils/placeholder";
 
 export default function ProductCard({ product }) {
   const { addToCart } = useCart();
+  const { toggleWishlist, isInWishlist } = useWishlist();
 
   const getProductImage = (p) => {
     if (!p?.images?.length) return getPlaceholderImage(400, 400, "Vistaraa Product");
@@ -37,6 +39,12 @@ export default function ProductCard({ product }) {
     }, 1000);
   };
 
+  const handleWishlistToggle = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleWishlist(product);
+  };
+
   return (
     <div className="glass-card product-card-container" style={{
       position: "relative",
@@ -63,6 +71,39 @@ export default function ProductCard({ product }) {
           }}
           loading="lazy"
         />
+
+        {/* Wishlist Heart Toggle */}
+        <button
+          onClick={handleWishlistToggle}
+          className="wishlist-btn"
+          style={{
+            position: "absolute",
+            top: "12px",
+            right: "12px",
+            zIndex: 10,
+            background: "rgba(255, 255, 255, 0.85)",
+            backdropFilter: "blur(4px)",
+            border: "none",
+            borderRadius: "50%",
+            width: "36px",
+            height: "36px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.12)",
+            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
+          }}
+          title={isInWishlist(product.id) ? "Remove from Wishlist" : "Add to Wishlist"}
+        >
+          <Heart
+            size={18}
+            fill={isInWishlist(product.id) ? "var(--error)" : "none"}
+            color={isInWishlist(product.id) ? "var(--error)" : "var(--text-main)"}
+            style={{ transition: "transform 0.2s ease" }}
+            className="wishlist-heart-icon"
+          />
+        </button>
 
         {/* Overlay Hover Actions */}
         <div className="card-hover-overlay" style={{
@@ -172,6 +213,13 @@ export default function ProductCard({ product }) {
         .quick-add-btn.added {
           background: var(--success) !important;
           transform: scale(1.1);
+        }
+        .wishlist-btn:hover {
+          transform: scale(1.1);
+          background: white !important;
+        }
+        .wishlist-btn:active {
+          transform: scale(0.9);
         }
       `}</style>
     </div>
