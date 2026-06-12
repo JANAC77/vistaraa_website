@@ -119,7 +119,7 @@ export default function Home() {
   };
 
   return (
-    <div style={{ paddingBottom: "80px", paddingTop: "80px", position: "relative", overflow: "hidden", background: "var(--bg-app)" }}>
+    <div className="home-wrapper" style={{ paddingBottom: "80px", paddingTop: "80px", position: "relative", overflow: "hidden", background: "var(--bg-app)" }}>
       {/* Background ambient mesh gradient blobs for a highly colorful page */}
       <div style={{
         position: "absolute",
@@ -243,9 +243,9 @@ export default function Home() {
                     }}>
                       {poster.subContents}
                     </p>
-                    <Link to="/shop" className="btn btn-primary" style={{ 
-                      padding: "16px 36px", 
-                      borderRadius: "18px", 
+                    <Link to="/shop" className="btn btn-primary" style={{
+                      padding: "16px 36px",
+                      borderRadius: "18px",
                       fontSize: "15px",
                       background: "linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)",
                       border: "none",
@@ -450,7 +450,7 @@ export default function Home() {
       {/* 3. DYNAMIC CATEGORIES OVERVIEW */}
       <section className="section-padding">
         <div className="container">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "36px" }}>
+          <div className="section-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "36px" }}>
             <div>
               <h2 style={{ fontSize: "32px", fontWeight: "800", color: "var(--text-main)" }}>Shop by Category</h2>
               <p style={{ color: "var(--text-muted)", marginTop: "6px" }}>Find items catered specifically for you</p>
@@ -467,7 +467,7 @@ export default function Home() {
               ))}
             </div>
           ) : categories.length > 0 ? (
-            <div style={{
+            <div className="category-grid" style={{
               display: "grid",
               gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
               gap: "24px"
@@ -578,7 +578,7 @@ export default function Home() {
       {recentlyViewed.length > 0 && (
         <section className="section-padding" style={{ position: "relative", zIndex: 1 }}>
           <div className="container">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "40px" }}>
+            <div className="section-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "40px" }}>
               <div>
                 <h2 style={{ fontSize: "32px", fontWeight: "800", color: "var(--text-main)" }}>Recently Viewed</h2>
                 <p style={{ color: "var(--text-muted)", marginTop: "6px" }}>Items you have inspected recently</p>
@@ -675,6 +675,64 @@ export default function Home() {
         .hover-link:hover {
           color: var(--accent) !important;
           transform: translateX(4px);
+        }
+        @media (max-width: 768px) {
+          .home-wrapper {
+            padding-top: 60px !important;
+            padding-bottom: 60px !important;
+          }
+          .slide-ctrl {
+            width: 36px !important;
+            height: 36px !important;
+            left: 12px !important;
+          }
+          .slide-ctrl:last-of-type {
+            right: 12px !important;
+            left: auto !important;
+          }
+          .feature-card {
+            padding: 16px !important;
+            gap: 12px !important;
+          }
+          .feature-card h4 {
+            font-size: 14px !important;
+          }
+          .feature-card p {
+            font-size: 12px !important;
+          }
+          .category-grid {
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) !important;
+            gap: 12px !important;
+          }
+          .category-card {
+            padding: 16px 10px !important;
+            gap: 10px !important;
+            border-radius: 16px !important;
+          }
+          .category-card .category-img-container {
+            width: 56px !important;
+            height: 56px !important;
+          }
+          .category-card h4 {
+            font-size: 11px !important;
+          }
+          .section-header {
+            margin-bottom: 24px !important;
+          }
+          .section-header h2 {
+            font-size: 24px !important;
+          }
+          .section-header p {
+            font-size: 13px !important;
+            margin-top: 2px !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .section-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 12px !important;
+          }
         }
       `}</style>
     </div>

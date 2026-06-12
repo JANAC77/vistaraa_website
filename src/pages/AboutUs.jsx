@@ -6,7 +6,7 @@ export default function AboutUs() {
   return (
     <div style={{ paddingTop: "120px", paddingBottom: "80px" }}>
       {/* 1. HERO SECTION */}
-      <section style={{ 
+      <section style={{
         background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%)",
         color: "white",
         padding: "80px 0",
@@ -17,7 +17,7 @@ export default function AboutUs() {
         {/* Background glow overlay */}
         <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.1)" }}></div>
         <div style={{ position: "absolute", top: "-50px", left: "-50px", width: "200px", height: "200px", borderRadius: "50%", background: "rgba(255,255,255,0.06)", filter: "blur(40px)" }}></div>
-        
+
         <div className="container" style={{ position: "relative", zIndex: 2 }}>
           <span style={{
             background: "rgba(255, 255, 255, 0.2)",

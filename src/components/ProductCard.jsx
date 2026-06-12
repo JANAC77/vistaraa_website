@@ -26,11 +26,11 @@ export default function ProductCard({ product }) {
     e.preventDefault();
     e.stopPropagation();
     if (isOutOfStock) return;
-    
+
     // Add default variant or none
     const defaultVariant = product.variants?.length > 0 ? product.variants[0] : null;
     addToCart(product, defaultVariant, 1);
-    
+
     // Quick notification animation or alert
     const target = e.currentTarget;
     target.classList.add("added");
@@ -144,12 +144,12 @@ export default function ProductCard({ product }) {
 
       {/* Product Description Info */}
       <div style={{ padding: "20px", display: "flex", flexDirection: "column", flexGrow: 1 }}>
-        <span style={{ 
-          fontSize: "11px", 
-          fontWeight: "800", 
-          textTransform: "uppercase", 
-          letterSpacing: "0.05em", 
-          color: "var(--text-muted)", 
+        <span style={{
+          fontSize: "11px",
+          fontWeight: "800",
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
+          color: "var(--text-muted)",
           marginBottom: "6px",
           display: "inline-flex",
           alignItems: "center",
@@ -158,7 +158,7 @@ export default function ProductCard({ product }) {
           <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--primary)", flexShrink: 0 }}></span>
           {product.brand && product.brand.trim() ? product.brand : (product.categoryName || "General")}
         </span>
-        
+
         <Link to={`/product/${product.id}`} style={{ display: "block", marginBottom: "8px" }}>
           <h3 className="product-title" style={{ fontSize: "16px", fontWeight: "700", lineHeight: "1.4", height: "44px", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
             {product.name}
