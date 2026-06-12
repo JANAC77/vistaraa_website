@@ -4,10 +4,12 @@ import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import ProductCard from "../components/ProductCard";
 import { Filter, RotateCcw, Search, Grid, List, ChevronDown } from "lucide-react";
+import { getPlaceholderImage } from "../utils/placeholder";
 
 export default function Shop() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialCategory = searchParams.get("category") || "";
+  const initialSubcategory = searchParams.get("subcategory") || "";
 
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -15,20 +17,22 @@ export default function Shop() {
   const [loading, setLoading] = useState(true);
 
   // Filter States
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(searchParams.get("search") || "");
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
-  const [selectedSubcategory, setSelectedSubcategory] = useState("");
+  const [selectedSubcategory, setSelectedSubcategory] = useState(initialSubcategory);
   const [selectedBrand, setSelectedBrand] = useState("");
   const [priceRange, setPriceRange] = useState({ min: 0, max: 100000 });
   const [sortBy, setSortBy] = useState("newest");
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
-    // Sync parameter changes (e.g. from homepage category click)
-    const catParam = searchParams.get("category");
-    if (catParam) {
-      setSelectedCategory(catParam);
-    }
+    // Sync parameter changes (e.g. from homepage or navbar click)
+    const catParam = searchParams.get("category") || "";
+    const subParam = searchParams.get("subcategory") || "";
+    const searchParam = searchParams.get("search") || "";
+    setSelectedCategory(catParam);
+    setSelectedSubcategory(subParam);
+    setSearch(searchParam);
   }, [searchParams]);
 
   useEffect(() => {
@@ -155,280 +159,211 @@ export default function Shop() {
     setSearchParams({});
   };
 
+
+
   return (
-    <div style={{ paddingTop: "120px", paddingBottom: "80px" }}>
+    <div style={{ paddingTop: "100px", paddingBottom: "60px" }}>
       <div className="container">
-        
-        {/* Title and Controls Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px", flexWrap: "wrap", gap: "16px" }}>
-          <div>
-            <h1 style={{ fontSize: "36px", fontWeight: "800" }}>Shop Collection</h1>
-            <p style={{ color: "var(--text-muted)", marginTop: "4px" }}>
-              Showing {processedProducts.length} premium products
-            </p>
-          </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%", smWidth: "auto", justifyContent: "flex-end" }}>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="btn btn-secondary mobile-filter-btn"
-              style={{ display: "none", alignItems: "center", gap: "6px" }}
-            >
-              <Filter size={18} /> Filters
-            </button>
-
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              style={{
-                padding: "12px 16px",
-                borderRadius: "14px",
-                border: "1px solid var(--border-color)",
-                background: "var(--bg-card)",
-                color: "var(--text-main)",
-                fontWeight: "600",
-                outline: "none"
-              }}
-            >
-              <option value="newest">Newest Arrivals</option>
-              <option value="price-low">Price: Low to High</option>
-              <option value="price-high">Price: High to Low</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Layout Grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: "40px" }} className="shop-layout-grid">
-          
-          {/* 1. FILTER SIDEBAR (Desktop) */}
-          <aside className={`filter-sidebar ${showFilters ? "open" : ""}`} style={{
+        {/* 1. TOP FILTERS BAR (Glassmorphism card layout) */}
+        <div
+          className="glass-card"
+          style={{
+            padding: "24px",
+            borderRadius: "24px",
+            marginBottom: "32px",
             display: "flex",
             flexDirection: "column",
-            gap: "28px",
-          }}>
-            {/* Mobile Header */}
-            <div style={{ display: "none", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-color)", paddingBottom: "16px" }} className="mobile-filter-header">
-              <h3 style={{ fontSize: "20px" }}>Filters</h3>
-              <button onClick={() => setShowFilters(false)} className="btn btn-secondary" style={{ padding: "8px 12px" }}>Close</button>
-            </div>
-
-            {/* Search Filter */}
-            <div style={{ position: "relative" }}>
-              <input
-                type="text"
-                placeholder="Search catalog..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="form-input"
-                style={{ paddingLeft: "44px" }}
-              />
-              <Search size={18} style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-            </div>
-
-            {/* Category Filter */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              <h4 style={{ fontSize: "15px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" }}>Categories</h4>
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                <button
-                  onClick={() => { setSelectedCategory(""); setSearchParams({}); }}
-                  style={{
-                    textAlign: "left",
-                    padding: "8px 12px",
-                    borderRadius: "8px",
-                    background: selectedCategory === "" ? "var(--primary-glow)" : "none",
-                    color: selectedCategory === "" ? "var(--primary)" : "var(--text-main)",
-                    border: "none",
-                    fontWeight: selectedCategory === "" ? "700" : "500",
-                    cursor: "pointer",
-                  }}
-                >
-                  All Categories
-                </button>
-                {categories.map((cat) => (
+            gap: "20px",
+            background: "var(--bg-card)"
+          }}
+        >
+          {/* Row 2: Category horizontal pills */}
+          <div>
+            <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "4px", scrollbarWidth: "none", msOverflowStyle: "none" }} className="hide-scrollbar">
+              <button
+                onClick={() => { setSelectedCategory(""); setSearchParams({}); }}
+                className={selectedCategory === "" ? "category-pill active" : "category-pill inactive"}
+                style={{
+                  background: selectedCategory === "" ? "var(--primary)" : undefined,
+                  boxShadow: selectedCategory === "" ? "0 4px 14px var(--primary-glow)" : undefined
+                }}
+              >
+                <Grid size={15} style={{ marginRight: "2px" }} />
+                All Categories
+              </button>
+              {categories.map((cat) => {
+                const isActive = selectedCategory === cat.id;
+                return (
                   <button
                     key={cat.id}
                     onClick={() => { setSelectedCategory(cat.id); setSearchParams({ category: cat.id }); }}
+                    className={`category-pill ${isActive ? "active" : "inactive"}`}
                     style={{
-                      textAlign: "left",
-                      padding: "8px 12px",
-                      borderRadius: "8px",
-                      background: selectedCategory === cat.id ? "var(--primary-glow)" : "none",
-                      color: selectedCategory === cat.id ? "var(--primary)" : "var(--text-main)",
-                      border: "none",
-                      fontWeight: selectedCategory === cat.id ? "700" : "500",
-                      cursor: "pointer",
+                      background: isActive ? "var(--primary)" : undefined,
+                      boxShadow: isActive ? "0 4px 14px var(--primary-glow)" : undefined,
+                      padding: "5px 16px 5px 6px"
                     }}
                   >
-                    {cat.name}
+                    <div style={{
+                      width: "26px",
+                      height: "26px",
+                      borderRadius: "50%",
+                      overflow: "hidden",
+                      background: "#ffffff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                      border: isActive ? "1px solid rgba(255,255,255,0.4)" : "1px solid var(--border-color)"
+                    }}>
+                      <img
+                        src={cat.image || cat.icon || getPlaceholderImage(60, 60, cat.name)}
+                        alt={cat.name}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    </div>
+                    <span>{cat.name}</span>
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
+          </div>
 
-            {/* Subcategory Filter (Conditional) */}
-            {selectedCategory && filteredSubcategoriesList.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                <h4 style={{ fontSize: "15px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" }}>Subcategories</h4>
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  <button
-                    onClick={() => setSelectedSubcategory("")}
-                    style={{
-                      textAlign: "left",
-                      padding: "8px 12px",
-                      borderRadius: "8px",
-                      background: selectedSubcategory === "" ? "var(--primary-glow)" : "none",
-                      color: selectedSubcategory === "" ? "var(--primary)" : "var(--text-main)",
-                      border: "none",
-                      fontWeight: selectedSubcategory === "" ? "700" : "500",
-                      cursor: "pointer",
-                    }}
-                  >
-                    All Subcategories
-                  </button>
-                  {filteredSubcategoriesList.map((sub) => (
+          {/* Row 3: Subcategory horizontal pills */}
+          {selectedCategory && filteredSubcategoriesList.length > 0 && (
+            <div style={{ borderTop: "1px dashed var(--border-color)", paddingTop: "16px" }}>
+              <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "4px", scrollbarWidth: "none", msOverflowStyle: "none" }} className="hide-scrollbar">
+                <button
+                  onClick={() => setSelectedSubcategory("")}
+                  className={selectedSubcategory === "" ? "subcategory-pill active" : "subcategory-pill inactive"}
+                  style={{
+                    background: selectedSubcategory === "" ? "var(--accent)" : undefined,
+                    boxShadow: selectedSubcategory === "" ? "0 4px 12px rgba(244, 63, 94, 0.3)" : undefined
+                  }}
+                >
+                  All Subcategories
+                </button>
+                {filteredSubcategoriesList.map((sub) => {
+                  const isActive = selectedSubcategory === sub.id;
+                  return (
                     <button
                       key={sub.id}
                       onClick={() => setSelectedSubcategory(sub.id)}
+                      className={`subcategory-pill ${isActive ? "active" : "inactive"}`}
                       style={{
-                        textAlign: "left",
-                        padding: "8px 12px",
-                        borderRadius: "8px",
-                        background: selectedSubcategory === sub.id ? "var(--primary-glow)" : "none",
-                        color: selectedSubcategory === sub.id ? "var(--primary)" : "var(--text-main)",
-                        border: "none",
-                        fontWeight: selectedSubcategory === sub.id ? "700" : "500",
-                        cursor: "pointer",
+                        background: isActive ? "var(--accent)" : undefined,
+                        boxShadow: isActive ? "0 4px 12px rgba(244, 63, 94, 0.3)" : undefined
                       }}
                     >
                       {sub.name}
                     </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Brand Filter */}
-            {brandsList.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                <h4 style={{ fontSize: "15px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" }}>Brands</h4>
-                <select
-                  value={selectedBrand}
-                  onChange={(e) => setSelectedBrand(e.target.value)}
-                  style={{
-                    padding: "12px",
-                    borderRadius: "12px",
-                    border: "1px solid var(--border-color)",
-                    background: "var(--bg-card)",
-                    color: "var(--text-main)",
-                    outline: "none"
-                  }}
-                >
-                  <option value="">All Brands</option>
-                  {brandsList.map((brand, i) => (
-                    <option key={i} value={brand}>{brand}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Price Slider */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              <h4 style={{ fontSize: "15px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)" }}>Max Price</h4>
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                <input
-                  type="range"
-                  min="0"
-                  max="150000"
-                  step="500"
-                  value={priceRange.max}
-                  onChange={(e) => setPriceRange({ ...priceRange, max: Number(e.target.value) })}
-                  style={{ width: "100%", accentColor: "var(--primary)" }}
-                />
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: "600" }}>
-                  <span>₹0</span>
-                  <span style={{ color: "var(--primary)" }}>Up to ₹{priceRange.max.toLocaleString()}</span>
-                </div>
+                  );
+                })}
               </div>
             </div>
-
-            {/* Reset Filters */}
-            <button
-              onClick={handleResetFilters}
-              className="btn btn-secondary"
-              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", marginTop: "12px" }}
-            >
-              <RotateCcw size={16} /> Reset Filters
-            </button>
-          </aside>
-
-          {/* 2. CATALOG PRODUCTS LIST GRID */}
-          <main>
-            {loading ? (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "24px" }}>
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="shimmer" style={{ height: "380px", borderRadius: "24px" }}></div>
-                ))}
-              </div>
-            ) : processedProducts.length > 0 ? (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "24px" }} className="shop-products-grid">
-                {processedProducts.map((product, index) => (
-                  <div key={product.id} className={`fade-in-up delay-${(index % 8) + 1}`}>
-                    <ProductCard product={product} />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{
-                textAlign: "center",
-                padding: "80px 40px",
-                background: "var(--bg-card)",
-                borderRadius: "24px",
-                border: "1px solid var(--border-color)",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: "16px"
-              }}>
-                <Search size={48} style={{ color: "var(--text-muted)" }} />
-                <h3 style={{ fontSize: "20px", fontWeight: "700" }}>No products found</h3>
-                <p style={{ color: "var(--text-muted)", maxWidth: "400px" }}>
-                  We couldn't find any products matching your active filters. Try adjusting your search query or reset filters.
-                </p>
-                <button onClick={handleResetFilters} className="btn btn-primary">Reset All Filters</button>
-              </div>
-            )}
-          </main>
-
+          )}
         </div>
+
+        {/* 2. CATALOG PRODUCTS LIST GRID */}
+        <main>
+          {loading ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "24px" }}>
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="shimmer" style={{ height: "380px", borderRadius: "24px" }}></div>
+              ))}
+            </div>
+          ) : processedProducts.length > 0 ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "24px" }} className="shop-products-grid">
+              {processedProducts.map((product, index) => (
+                <div key={product.id} className={`fade-in-up delay-${(index % 8) + 1}`}>
+                  <ProductCard product={product} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{
+              textAlign: "center",
+              padding: "80px 40px",
+              background: "var(--bg-card)",
+              borderRadius: "24px",
+              border: "1px solid var(--border-color)",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "16px"
+            }}>
+              <Search size={48} style={{ color: "var(--text-muted)" }} />
+              <h3 style={{ fontSize: "20px", fontWeight: "700" }}>No products found</h3>
+              <p style={{ color: "var(--text-muted)", maxWidth: "400px" }}>
+                We couldn't find any products matching your active filters. Try adjusting your search query or reset filters.
+              </p>
+              <button onClick={handleResetFilters} className="btn btn-primary">Reset All Filters</button>
+            </div>
+          )}
+        </main>
+
       </div>
 
       <style>{`
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .category-pill {
+          padding: 8px 18px;
+          border-radius: 99px;
+          font-weight: 600;
+          font-size: 14px;
+          white-space: nowrap;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .category-pill.active {
+          color: #ffffff;
+          border: 1px solid transparent;
+        }
+        .category-pill.inactive {
+          background: var(--bg-app);
+          color: var(--text-main);
+          border: 1px solid var(--border-color);
+        }
+        @media (hover: hover) {
+          .category-pill.inactive:hover {
+            background: var(--border-color) !important;
+            transform: translateY(-1.5px);
+          }
+        }
+        .subcategory-pill {
+          padding: 6px 14px;
+          border-radius: 99px;
+          font-weight: 600;
+          font-size: 13px;
+          white-space: nowrap;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .subcategory-pill.active {
+          color: #ffffff;
+          border: 1px solid transparent;
+        }
+        .subcategory-pill.inactive {
+          background: var(--bg-app);
+          color: var(--text-main);
+          border: 1px solid var(--border-color);
+        }
+        @media (hover: hover) {
+          .subcategory-pill.inactive:hover {
+            background: var(--border-color) !important;
+            transform: translateY(-1.5px);
+          }
+        }
         @media (max-width: 768px) {
-          .shop-layout-grid {
+          .top-filters-grid {
             grid-template-columns: 1fr !important;
-          }
-          .mobile-filter-btn {
-            display: inline-flex !important;
-          }
-          .filter-sidebar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100vh;
-            background: var(--bg-app);
-            z-index: 2000;
-            padding: 32px 24px;
-            overflow-y: auto;
-            transform: translateX(-100%);
-            transition: transform 0.3s ease-in-out;
-            display: flex !important;
-          }
-          .filter-sidebar.open {
-            transform: translateX(0);
-          }
-          .mobile-filter-header {
-            display: flex !important;
+            gap: 12px !important;
           }
         }
       `}</style>

@@ -9,14 +9,15 @@
   --font-body: 'Inter', sans-serif;
 
   /* Color Palette (HSL for seamless transparency & adaptation) */
-  --primary-hue: 255; /* Refined Slate Violet-Purple */
+  --primary-hue: 255;
+  /* Refined Slate Violet-Purple */
   --primary-sat: 72%;
   --primary-light: 56%;
-  
+
   --primary: hsl(var(--primary-hue), var(--primary-sat), var(--primary-light));
   --primary-hover: hsl(var(--primary-hue), var(--primary-sat), calc(var(--primary-light) - 8%));
   --primary-glow: hsla(var(--primary-hue), var(--primary-sat), var(--primary-light), 0.2);
-  
+
   --accent-hue: 335;
   --accent-sat: 90%;
   --accent-light: 60%;
@@ -24,19 +25,21 @@
   --accent-hover: hsl(var(--accent-hue), var(--accent-sat), calc(var(--accent-light) - 8%));
 
   /* Light Theme Defaults (Clean modern UI with subtle purple highlights) */
-  --bg-app: #fafafd; /* Clean cool-white slate */
+  --bg-app: #fafafd;
+  /* Clean cool-white slate */
   --bg-card: rgba(255, 255, 255, 0.92);
-  --border-color: rgba(229, 231, 235, 0.7); /* Clean neutral grey */
+  --border-color: rgba(229, 231, 235, 0.7);
+  /* Clean neutral grey */
   --text-main: #0f172a;
   --text-muted: #64748b;
   --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.04), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 10px 15px -3px rgba(139, 92, 246, 0.03), 0 4px 6px -4px rgba(139, 92, 246, 0.03);
   --shadow-lg: 0 20px 25px -5px rgba(15, 23, 42, 0.06), 0 8px 10px -6px rgba(15, 23, 42, 0.06);
-  
+
   --glass-bg: rgba(255, 255, 255, 0.85);
   --glass-border: rgba(255, 255, 255, 0.7);
   --glass-blur: 16px;
-  
+
   /* Additional UI Colors */
   --success: #10b981;
   --warning: #f59e0b;
@@ -46,7 +49,8 @@
 
 /* --- Dark Theme Variables --- */
 [data-theme='dark'] {
-  --bg-app: #090a0f; /* Deep dark slate-black */
+  --bg-app: #090a0f;
+  /* Deep dark slate-black */
   --bg-card: rgba(17, 18, 26, 0.85);
   --border-color: rgba(38, 40, 58, 0.6);
   --text-main: #f8fafc;
@@ -54,7 +58,7 @@
   --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
-  
+
   --glass-bg: rgba(14, 15, 23, 0.85);
   --glass-border: rgba(255, 255, 255, 0.05);
   --card-border-hover: rgba(139, 92, 246, 0.4);
@@ -71,9 +75,9 @@
 body {
   font-family: var(--font-body);
   background-color: var(--bg-app);
-  background-image: 
-    radial-gradient(at 0% 0%, hsla(262, 40%, 93%, 0.15) 0px, transparent 50%),
-    radial-gradient(at 100% 0%, hsla(262, 40%, 93%, 0.08) 0px, transparent 50%);
+  background-image:
+    radial-gradient(at 15% 15%, hsla(255, 72%, 92%, 0.35) 0px, transparent 50%),
+    radial-gradient(at 85% 20%, hsla(335, 90%, 92%, 0.3) 0px, transparent 50%);
   color: var(--text-main);
   line-height: 1.6;
   overflow-x: hidden;
@@ -81,12 +85,17 @@ body {
 }
 
 [data-theme='dark'] body {
-  background-image: 
+  background-image:
     radial-gradient(at 0% 0%, hsla(262, 50%, 15%, 0.15) 0px, transparent 50%),
     radial-gradient(at 100% 0%, hsla(262, 50%, 12%, 0.08) 0px, transparent 50%);
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: var(--font-heading);
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -99,7 +108,10 @@ a {
   transition: color 0.2s ease;
 }
 
-button, input, select, textarea {
+button,
+input,
+select,
+textarea {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
@@ -152,9 +164,9 @@ button, input, select, textarea {
   border: 1px solid var(--glass-border);
   border-radius: 24px;
   box-shadow: var(--shadow-md);
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), 
-              box-shadow 0.3s ease, 
-              border-color 0.3s ease;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.3s ease,
+    border-color 0.3s ease;
 }
 
 .glass-card:hover {
@@ -263,12 +275,10 @@ button, input, select, textarea {
 
 /* --- Shimmer Skeleton Loader --- */
 .shimmer {
-  background: linear-gradient(
-    90deg,
-    var(--border-color) 25%,
-    var(--bg-card) 37%,
-    var(--border-color) 63%
-  );
+  background: linear-gradient(90deg,
+      var(--border-color) 25%,
+      var(--bg-card) 37%,
+      var(--border-color) 63%);
   background-size: 400% 100%;
   animation: shimmer-anim 1.4s ease infinite;
 }
@@ -277,6 +287,7 @@ button, input, select, textarea {
   0% {
     background-position: 100% 50%;
   }
+
   100% {
     background-position: 0 50%;
   }
@@ -288,6 +299,7 @@ button, input, select, textarea {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -299,8 +311,13 @@ button, input, select, textarea {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .fade-in {
@@ -326,18 +343,21 @@ button, input, select, textarea {
 }
 
 .badge-sale {
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--error);
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  color: white;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.25);
 }
 
 .badge-new {
-  background: rgba(16, 185, 129, 0.1);
-  color: var(--success);
+  background: linear-gradient(135deg, #10b981, #047857);
+  color: white;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
 }
 
 .badge-out {
-  background: rgba(100, 116, 139, 0.1);
-  color: var(--text-muted);
+  background: linear-gradient(135deg, #64748b, #475569);
+  color: white;
+  box-shadow: 0 2px 6px rgba(100, 116, 139, 0.15);
 }
 
 /* --- Spinner Animation --- */
@@ -350,18 +370,41 @@ button, input, select, textarea {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
 }
 
 /* --- Staggered Entrance Animation Delays --- */
-.delay-1 { animation-delay: 0.05s; }
-.delay-2 { animation-delay: 0.1s; }
-.delay-3 { animation-delay: 0.15s; }
-.delay-4 { animation-delay: 0.2s; }
-.delay-5 { animation-delay: 0.25s; }
-.delay-6 { animation-delay: 0.35s; }
-.delay-7 { animation-delay: 0.4s; }
-.delay-8 { animation-delay: 0.45s; }
+.delay-1 {
+  animation-delay: 0.05s;
+}
 
+.delay-2 {
+  animation-delay: 0.1s;
+}
+
+.delay-3 {
+  animation-delay: 0.15s;
+}
+
+.delay-4 {
+  animation-delay: 0.2s;
+}
+
+.delay-5 {
+  animation-delay: 0.25s;
+}
+
+.delay-6 {
+  animation-delay: 0.35s;
+}
+
+.delay-7 {
+  animation-delay: 0.4s;
+}
+
+.delay-8 {
+  animation-delay: 0.45s;
+}

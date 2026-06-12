@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { auth, db } from "../firebase";
-import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { ShieldCheck, Truck, CreditCard, ArrowLeft, CheckCircle } from "lucide-react";
 import { getPlaceholderImage } from "../utils/placeholder";
 
@@ -49,6 +49,29 @@ export default function Checkout() {
       name: user.displayName || "",
       email: user.email || ""
     }));
+
+    // Fetch extra details from Firestore to autofill shipping address
+    const fetchProfileDetails = async () => {
+      try {
+        const userDocRef = doc(db, "users", user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          const data = userDocSnap.data();
+          setFormData(prev => ({
+            ...prev,
+            name: user.displayName || data.name || prev.name,
+            phone: data.phone || prev.phone,
+            address: data.address || prev.address,
+            city: data.city || prev.city,
+            state: data.state || prev.state,
+            pincode: data.pincode || prev.pincode
+          }));
+        }
+      } catch (err) {
+        console.error("Error fetching profile details for checkout:", err);
+      }
+    };
+    fetchProfileDetails();
   }, [navigate]);
 
   if (checkoutItems.length === 0 && !orderPlaced) {

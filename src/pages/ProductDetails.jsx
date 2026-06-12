@@ -22,6 +22,7 @@ export default function ProductDetails() {
 
   // Success state for add button
   const [added, setAdded] = useState(false);
+  const [isDescExpanded, setIsDescExpanded] = useState(false);
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -32,8 +33,48 @@ export default function ProductDetails() {
 
         if (docSnap.exists()) {
           const data = docSnap.data();
-          setProduct({ id: docSnap.id, ...data });
-          
+          let categoryName = data.categoryName || "";
+          let subcategoryName = data.subcategoryName || "";
+
+          if (data.category && !categoryName) {
+            try {
+              const catSnap = await getDoc(doc(db, "categories", data.category));
+              if (catSnap.exists()) {
+                categoryName = catSnap.data().name || "";
+              }
+            } catch (err) {
+              console.error("Error fetching category name:", err);
+            }
+          }
+
+          if (data.subcategory && !subcategoryName) {
+            try {
+              const subSnap = await getDoc(doc(db, "subcategories", data.subcategory));
+              if (subSnap.exists()) {
+                subcategoryName = subSnap.data().name || "";
+              }
+            } catch (err) {
+              console.error("Error fetching subcategory name:", err);
+            }
+          }
+
+          setProduct({
+            id: docSnap.id,
+            ...data,
+            categoryName,
+            subcategoryName
+          });
+
+          // Track recently viewed product ID
+          try {
+            const viewed = JSON.parse(localStorage.getItem("recently_viewed") || "[]");
+            const filtered = viewed.filter(vId => vId !== docSnap.id);
+            filtered.unshift(docSnap.id);
+            localStorage.setItem("recently_viewed", JSON.stringify(filtered.slice(0, 8)));
+          } catch (err) {
+            console.error("Error saving recently viewed product ID:", err);
+          }
+
           // Set primary image or first image as default
           if (data.images?.length > 0) {
             const primary = data.images.find(img => img.isPrimary);
@@ -84,12 +125,12 @@ export default function ProductDetails() {
     );
   }
 
-  const isOutOfStock = selectedVariant 
-    ? Number(selectedVariant.stock) <= 0 
+  const isOutOfStock = selectedVariant
+    ? Number(selectedVariant.stock) <= 0
     : Number(product.stock) <= 0;
 
-  const currentPrice = selectedVariant 
-    ? Number(selectedVariant.price) 
+  const currentPrice = selectedVariant
+    ? Number(selectedVariant.price)
     : Number(product.salePrice || product.price || 0);
 
   const originalPrice = selectedVariant
@@ -97,7 +138,7 @@ export default function ProductDetails() {
     : Number(product.price || 0);
 
   const hasDiscount = originalPrice && currentPrice < originalPrice;
-  const discountPercent = hasDiscount 
+  const discountPercent = hasDiscount
     ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100)
     : 0;
 
@@ -136,6 +177,12 @@ export default function ProductDetails() {
     navigate("/checkout", { state: { buyNowItem } });
   };
 
+  const descText = product?.description || "No description provided for this premium Vistaraa product. It offers excellent style, durability, and satisfies top quality parameters.";
+  const showReadMore = descText.length > 300;
+  const displayedDesc = showReadMore && !isDescExpanded
+    ? descText.substring(0, 300) + "..."
+    : descText;
+
   return (
     <div style={{ paddingTop: "120px", paddingBottom: "80px" }}>
       <div className="container">
@@ -146,7 +193,7 @@ export default function ProductDetails() {
 
         {/* Product Details Grid */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "60px", alignItems: "start" }} className="details-layout-grid">
-          
+
           {/* Left: Images Gallery */}
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             <div className="glass-card" style={{
@@ -200,13 +247,24 @@ export default function ProductDetails() {
           {/* Right: Info Section */}
           <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
             <div>
-              <span style={{ fontSize: "12px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--primary)", display: "block", marginBottom: "8px" }}>
-                {product.brand || "General Brand"}
+              <span style={{
+                fontSize: "12px",
+                fontWeight: "800",
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                color: "var(--text-muted)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                marginBottom: "8px"
+              }}>
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--primary)", flexShrink: 0 }}></span>
+                {product.categoryName || "General"}
               </span>
               <h1 style={{ fontSize: "clamp(24px, 4vw, 36px)", fontWeight: "900", lineHeight: "1.2", marginBottom: "12px" }}>
                 {product.name}
               </h1>
-              
+
               {/* Reviews Mock */}
               <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", color: "var(--text-muted)" }}>
                 <div style={{ display: "flex", color: "#f59e0b" }}>
@@ -245,24 +303,18 @@ export default function ProductDetails() {
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                 <span style={{ fontSize: "13px", fontWeight: "800", textTransform: "uppercase", color: "var(--text-muted)" }}>Select Variant / Size</span>
                 <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-                  {product.variants.map((v, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setSelectedVariant(v)}
-                      style={{
-                        padding: "10px 20px",
-                        borderRadius: "14px",
-                        border: selectedVariant?.sku === v.sku ? "2px solid var(--primary)" : "1px solid var(--border-color)",
-                        background: selectedVariant?.sku === v.sku ? "var(--primary-glow)" : "var(--bg-card)",
-                        color: selectedVariant?.sku === v.sku ? "var(--primary)" : "var(--text-main)",
-                        fontWeight: "700",
-                        cursor: "pointer",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      {v.size} {Number(v.stock) <= 5 && <span style={{ color: "var(--error)", fontSize: "10px" }}>({v.stock} left)</span>}
-                    </button>
-                  ))}
+                  {product.variants.map((v, i) => {
+                    const isActive = selectedVariant?.sku === v.sku;
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => setSelectedVariant(v)}
+                        className={`variant-select-btn ${isActive ? "active" : "inactive"}`}
+                      >
+                        {v.size} {Number(v.stock) <= 5 && <span style={{ color: "var(--error)", fontSize: "10px" }}>({v.stock} left)</span>}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -325,17 +377,7 @@ export default function ProductDetails() {
                 <button
                   onClick={handleAddToCart}
                   disabled={isOutOfStock}
-                  className={`btn ${added ? "btn-secondary" : "btn-secondary"}`}
-                  style={{
-                    flex: 1,
-                    padding: "16px",
-                    borderRadius: "16px",
-                    fontSize: "15px",
-                    background: isOutOfStock ? "var(--border-color)" : (added ? "var(--success)" : "var(--bg-card)"),
-                    color: added ? "white" : "var(--text-main)",
-                    cursor: isOutOfStock ? "not-allowed" : "pointer",
-                    border: added ? "none" : "1px solid var(--border-color)"
-                  }}
+                  className={`add-to-cart-btn ${added ? "added-state" : ""}`}
                 >
                   {isOutOfStock ? (
                     "Sold Out"
@@ -354,15 +396,7 @@ export default function ProductDetails() {
                 <button
                   onClick={handleBuyNow}
                   disabled={isOutOfStock}
-                  className="btn btn-primary"
-                  style={{
-                    flex: 1,
-                    padding: "16px",
-                    borderRadius: "16px",
-                    fontSize: "15px",
-                    background: isOutOfStock ? "var(--border-color)" : undefined,
-                    cursor: isOutOfStock ? "not-allowed" : "pointer"
-                  }}
+                  className="btn btn-primary buy-now-btn"
                 >
                   Buy Now
                 </button>
@@ -414,9 +448,32 @@ export default function ProductDetails() {
               </div>
 
               {activeTab === "desc" ? (
-                <p style={{ fontSize: "14px", color: "var(--text-muted)", lineHeight: "1.7", whiteSpace: "pre-line" }}>
-                  {product.description || "No description provided for this premium Vistaraa product. It offers excellent style, durability, and satisfies top quality parameters."}
-                </p>
+                <div>
+                  <p style={{ fontSize: "14px", color: "var(--text-muted)", lineHeight: "1.7", whiteSpace: "pre-line" }}>
+                    {displayedDesc}
+                  </p>
+                  {showReadMore && (
+                    <button
+                      onClick={() => setIsDescExpanded(!isDescExpanded)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "var(--primary)",
+                        fontWeight: "700",
+                        fontSize: "14px",
+                        cursor: "pointer",
+                        padding: "4px 0",
+                        marginTop: "8px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}
+                      className="read-more-btn"
+                    >
+                      {isDescExpanded ? "Read Less ↑" : "Read More ↓"}
+                    </button>
+                  )}
+                </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "14px" }}>
                   <div style={{ display: "grid", gridTemplateColumns: "150px 1fr", borderBottom: "1px solid var(--border-color)", paddingBottom: "6px" }}>
@@ -455,6 +512,83 @@ export default function ProductDetails() {
         }
         .details-wishlist-btn:active {
           transform: translateY(0);
+        }
+        .variant-select-btn {
+          padding: 10px 20px;
+          border-radius: 14px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .variant-select-btn.active {
+          border: 2px solid var(--primary);
+          background: var(--primary-glow);
+          color: var(--primary);
+        }
+        .variant-select-btn.inactive {
+          border: 1px solid var(--border-color);
+          background: var(--bg-card);
+          color: var(--text-main);
+        }
+        .variant-select-btn.inactive:hover {
+          background: var(--border-color);
+          border-color: var(--text-muted);
+          transform: translateY(-1px);
+        }
+        .add-to-cart-btn {
+          flex: 1;
+          padding: 16px;
+          border-radius: 16px;
+          font-size: 15px;
+          font-weight: 600;
+          background: var(--bg-card);
+          color: var(--text-main);
+          border: 1px solid var(--border-color);
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .add-to-cart-btn:hover:not(:disabled) {
+          background: var(--border-color);
+          transform: translateY(-2px);
+          box-shadow: var(--shadow-sm);
+        }
+        .add-to-cart-btn:active:not(:disabled) {
+          transform: translateY(0);
+        }
+        .add-to-cart-btn:disabled {
+          background: var(--border-color);
+          color: var(--text-muted);
+          border-color: transparent;
+          cursor: not-allowed;
+        }
+        .add-to-cart-btn.added-state {
+          background: var(--success);
+          color: white;
+          border-color: transparent;
+        }
+        .buy-now-btn {
+          flex: 1;
+          padding: 16px;
+          border-radius: 16px;
+          font-size: 15px;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .buy-now-btn:disabled {
+          background: var(--border-color) !important;
+          color: var(--text-muted) !important;
+          cursor: not-allowed;
+          box-shadow: none !important;
+        }
+        .read-more-btn {
+          transition: opacity 0.2s ease;
+        }
+        .read-more-btn:hover {
+          opacity: 0.85;
         }
       `}</style>
     </div>
