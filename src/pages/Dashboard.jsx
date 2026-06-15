@@ -57,7 +57,147 @@ export default function Dashboard() {
         return tB - tA;
       });
 
-      setOrders(data);
+      // Self-healing migration for legacy orders to support the mobile app schema
+      const repairedData = [];
+      for (let order of data) {
+        let needsUpdate = false;
+        const updates = {};
+
+        // 1. userId / user_id
+        if (!order.userId) {
+          updates.userId = uid;
+          order.userId = uid;
+          needsUpdate = true;
+        }
+
+        // 2. orderId / order_id
+        if (!order.orderId) {
+          updates.orderId = order.id;
+          order.orderId = order.id;
+          needsUpdate = true;
+        }
+
+        // 3. quantity (int)
+        if (order.quantity === undefined || order.quantity === null || typeof order.quantity !== "number") {
+          const calculatedQty = order.products?.reduce((sum, p) => sum + (Number(p.quantity) || 1), 0) || 1;
+          updates.quantity = Number(calculatedQty);
+          order.quantity = Number(calculatedQty);
+          needsUpdate = true;
+        }
+
+        // 4. totalAmount (double)
+        if (order.totalAmount === undefined || order.totalAmount === null || typeof order.totalAmount !== "number") {
+          const amt = Number(order.totalAmount) || 0.0;
+          updates.totalAmount = amt;
+          order.totalAmount = amt;
+          needsUpdate = true;
+        }
+
+        // 5. phoneNumber (int)
+        const rawPhone = order.phoneNumber !== undefined && order.phoneNumber !== null ? order.phoneNumber : order.customerPhone;
+        const parsedPhone = typeof rawPhone === "number" ? rawPhone : (parseInt(String(rawPhone || "").replace(/\D/g, ""), 10) || 0);
+        if (order.phoneNumber === undefined || order.phoneNumber === null || typeof order.phoneNumber !== "number" || order.phoneNumber !== parsedPhone) {
+          updates.phoneNumber = parsedPhone;
+          order.phoneNumber = parsedPhone;
+          needsUpdate = true;
+        }
+
+        // 6. latitude & longitude (double)
+        if (order.latitude === undefined || order.latitude === null || typeof order.latitude !== "number") {
+          updates.latitude = 0.0;
+          order.latitude = 0.0;
+          needsUpdate = true;
+        }
+        if (order.longitude === undefined || order.longitude === null || typeof order.longitude !== "number") {
+          updates.longitude = 0.0;
+          order.longitude = 0.0;
+          needsUpdate = true;
+        }
+
+        // 7. deliveryCharges & shippingCharges (double)
+        if (order.deliveryCharges === undefined || order.deliveryCharges === null || typeof order.deliveryCharges !== "number") {
+          const delCharges = Number(order.shippingCharges) || 0.0;
+          updates.deliveryCharges = delCharges;
+          order.deliveryCharges = delCharges;
+          needsUpdate = true;
+        }
+        if (order.shippingCharges !== undefined && order.shippingCharges !== null && typeof order.shippingCharges !== "number") {
+          const shipCharges = Number(order.shippingCharges) || 0.0;
+          updates.shippingCharges = shipCharges;
+          order.shippingCharges = shipCharges;
+          needsUpdate = true;
+        }
+
+        // 8. paymentMethod (String)
+        if (!order.paymentMethod) {
+          const payMethod = order.status === "COD" ? "COD" : "Prepaid";
+          updates.paymentMethod = payMethod;
+          order.paymentMethod = payMethod;
+          needsUpdate = true;
+        }
+
+        // 9. orderDate (Timestamp)
+        if (!order.orderDate) {
+          const fallbackDate = order.createdAt || serverTimestamp();
+          updates.orderDate = fallbackDate;
+          order.orderDate = fallbackDate;
+          needsUpdate = true;
+        }
+
+        // 10. Products check
+        if (order.products && Array.isArray(order.products)) {
+          let productsUpdated = false;
+          const updatedProducts = order.products.map(p => {
+            let pChanged = false;
+            const updatedP = { ...p };
+
+            if (!updatedP.productid) {
+              updatedP.productid = updatedP.id || "";
+              pChanged = true;
+            }
+            if (updatedP.price !== undefined && typeof updatedP.price !== "number") {
+              updatedP.price = Number(updatedP.price) || 0.0;
+              pChanged = true;
+            }
+            if (updatedP.salePrice !== undefined && typeof updatedP.salePrice !== "number") {
+              updatedP.salePrice = Number(updatedP.salePrice) || 0.0;
+              pChanged = true;
+            }
+            if (updatedP.quantity !== undefined && typeof updatedP.quantity !== "number") {
+              updatedP.quantity = Number(updatedP.quantity) || 1;
+              pChanged = true;
+            }
+            if (!updatedP.images || !Array.isArray(updatedP.images)) {
+              updatedP.images = updatedP.image ? [updatedP.image] : [];
+              pChanged = true;
+            }
+
+            if (pChanged) {
+              productsUpdated = true;
+            }
+            return updatedP;
+          });
+
+          if (productsUpdated) {
+            updates.products = updatedProducts;
+            order.products = updatedProducts;
+            needsUpdate = true;
+          }
+        }
+
+        if (needsUpdate) {
+          const orderDocRef = doc(db, "users", uid, "orders", order.id);
+          updateDoc(orderDocRef, updates).then(() => {
+            console.log(`Self-healing: successfully migrated order ${order.id} to Flutter-compatible schema.`);
+          }).catch(err => {
+            console.error(`Self-healing: failed to migrate order ${order.id}:`, err);
+          });
+        }
+
+        repairedData.push(order);
+      }
+
+      setOrders(repairedData);
     } catch (error) {
       console.error("Error fetching orders:", error);
     } finally {

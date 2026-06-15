@@ -3,10 +3,10 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { auth, db } from "../firebase";
 import { collection, doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
-import { ShieldCheck, Truck, CreditCard, ArrowLeft, CheckCircle } from "lucide-react";
+import { ShieldCheck, Truck, CreditCard, ArrowLeft, CheckCircle, MapPin } from "lucide-react";
 import { getPlaceholderImage } from "../utils/placeholder";
 
-const BACKEND_API_URL = "http://localhost:3000"; // Default local backend API URL
+const BACKEND_API_URL = import.meta.env.VITE_BACKEND_API_URL || "https://vistaraa-server.vercel.app";
 
 export default function Checkout() {
   const { cart, cartTotal, clearCart } = useCart();
@@ -34,6 +34,7 @@ export default function Checkout() {
   const [shippingError, setShippingError] = useState("");
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [placedOrderId, setPlacedOrderId] = useState("");
+  const [detectingLocation, setDetectingLocation] = useState(false);
 
   useEffect(() => {
     // Redirect to auth if not logged in
@@ -92,8 +93,8 @@ export default function Checkout() {
   };
 
   // 1. PINCODE SHIPPING API CALCULATION
-  const handleVerifyPincode = async (targetMethod = paymentMethod) => {
-    const { pincode } = formData;
+  const handleVerifyPincode = async (targetMethod = paymentMethod, targetPincode = formData.pincode) => {
+    const pincode = targetPincode;
     if (!pincode || pincode.length < 6) {
       setShippingError("Please enter a valid 6-digit pincode.");
       return;
@@ -110,12 +111,14 @@ export default function Checkout() {
       const response = await fetch(`${BACKEND_API_URL}/api/shipping-charges`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${import.meta.env.VITE_JWT_SECRET || "006eb537ffea3dafe0e3a16233c449a1e20510e8f3404b1a456f53cf6ca7f371"}`
         },
         body: JSON.stringify({
           delivery_pincode: pincode,
           weight: totalWeight,
-          cod: targetMethod === "COD"
+          cod: targetMethod === "COD",
+          pickup_pincode: "583227"
         })
       });
 
@@ -153,6 +156,80 @@ export default function Checkout() {
     }
   };
 
+  // 1.1 GEOLOCATION & REVERSE GEOCODING API
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
+
+    setDetectingLocation(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`,
+            {
+              headers: {
+                "Accept-Language": "en"
+              }
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            const addressInfo = data.address || {};
+
+            const postcode = (addressInfo.postcode || "").replace(/\s/g, "");
+            const city = addressInfo.city || addressInfo.town || addressInfo.village || addressInfo.county || "";
+            const state = addressInfo.state || "";
+
+            const streetParts = [
+              addressInfo.suburb,
+              addressInfo.neighbourhood,
+              addressInfo.road,
+              addressInfo.house_number
+            ].filter(Boolean);
+
+            const constructedAddress = streetParts.reverse().join(", ") || addressInfo.display_name || "";
+
+            setFormData(prev => ({
+              ...prev,
+              address: constructedAddress || prev.address,
+              city: city || prev.city,
+              state: state || prev.state,
+              pincode: postcode || prev.pincode
+            }));
+
+            // Automatically verify shipping charges if 6-digit pincode is fetched
+            if (postcode && postcode.length === 6) {
+              handleVerifyPincode(paymentMethod, postcode);
+            }
+          } else {
+            throw new Error("Failed to retrieve location details.");
+          }
+        } catch (error) {
+          console.error("Reverse geocoding error:", error);
+          alert("Could not fetch address details automatically. Please fill in details manually.");
+        } finally {
+          setDetectingLocation(false);
+        }
+      },
+      (error) => {
+        console.error("Geolocation error:", error);
+        setDetectingLocation(false);
+        let errorMsg = "Unable to retrieve your location.";
+        if (error.code === error.PERMISSION_DENIED) {
+          errorMsg = "Location access was denied. Please enable location permissions in your browser settings.";
+        }
+        alert(errorMsg);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
   // Load Razorpay Script Helper
   const loadRazorpayScript = () => {
     return new Promise((resolve) => {
@@ -172,7 +249,10 @@ export default function Checkout() {
 
     const newOrderRef = doc(collection(db, "users", user.uid, "orders"), orderId);
 
+    const totalQuantity = checkoutItems.reduce((acc, curr) => acc + (Number(curr.quantity) || 1), 0);
+
     const orderData = {
+      // Legacy website compatibility fields
       id: orderId,
       order_id: orderId,
       user_id: user.uid,
@@ -183,24 +263,41 @@ export default function Checkout() {
       city: city,
       state: state,
       pinCode: pincode,
-      totalAmount: finalAmount,
-      shippingCharges: shippingCharges,
+      totalAmount: Number(finalAmount) || 0.0,
+      shippingCharges: Number(shippingCharges) || 0.0,
       paymentId: paymentId,
       status: paymentStatus,
       orderStatus: "placed",
       shiprocketStatus: "NEW",
+      createdAt: serverTimestamp(),
+      orderDate: serverTimestamp(),
+
+      // Mobile app (Flutter Dart OrderModel) compatibility fields
+      orderId: orderId,
+      userId: user.uid,
+      quantity: totalQuantity,
+      phoneNumber: parseInt(phone.replace(/\D/g, ""), 10) || 0,
+      latitude: 0.0,
+      longitude: 0.0,
+      deliveryCharges: Number(shippingCharges) || 0.0,
+      paymentMethod: paymentMethod, // "Prepaid" or "COD"
+
+      // Products mapping compatible with OrderProductModel
       products: checkoutItems.map(item => ({
+        // Legacy website properties
         id: item.id,
         name: item.name,
-        price: item.price,
-        salePrice: item.salePrice,
-        quantity: item.quantity,
-        sku: item.sku,
+        price: Number(item.price) || 0.0,
+        salePrice: Number(item.salePrice || item.price) || 0.0,
+        sku: item.sku || "",
         variantSize: item.variantSize || null,
-        image: item.image || null
-      })),
-      createdAt: serverTimestamp(),
-      orderDate: serverTimestamp()
+        image: item.image || null,
+        quantity: Number(item.quantity) || 1,
+
+        // Dart model properties
+        productid: item.id,
+        images: item.image ? [item.image] : []
+      }))
     };
 
     // 1. Write order to user's Firestore orders collection
@@ -208,34 +305,41 @@ export default function Checkout() {
 
     // 2. Try to sync order with backend / Shiprocket API flow
     try {
+      const nameParts = name.trim().split(/\s+/);
+      const firstName = nameParts[0] || "";
+      const lastName = nameParts.slice(1).join(" ") || "";
+
+      const d = new Date();
+      const orderDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
       await fetch(`${BACKEND_API_URL}/api/create-order`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer app-client" // Mock auth bearer token verified by backend
+          "Authorization": `Bearer ${import.meta.env.VITE_JWT_SECRET || "006eb537ffea3dafe0e3a16233c449a1e20510e8f3404b1a456f53cf6ca7f371"}`
         },
         body: JSON.stringify({
           order_id: orderId,
           user_id: user.uid,
-          order_date: new Date().toISOString().split('T')[0],
-          pickup_location: "Warehouse",
-          billing_customer_name: name,
-          billing_last_name: "",
+          order_date: orderDateStr,
+          pickup_location: "warehouse",
+          billing_customer_name: firstName,
+          billing_last_name: lastName,
           billing_address: address,
           billing_city: city,
-          billing_pincode: pincode,
+          billing_pincode: Number(pincode) || pincode,
           billing_state: state,
           billing_country: "India",
-          billing_email: email,
+          billing_email: email.trim().length > 0 ? email : "customer@example.com",
           billing_phone: phone,
           shipping_is_billing: true,
           order_items: checkoutItems.map(item => ({
             name: item.name,
-            sku: item.sku,
+            sku: item.sku || item.id,
             units: item.quantity,
             selling_price: item.salePrice
           })),
-          payment_method: paymentStatus,
+          payment_method: paymentStatus === "COD" ? "COD" : "Prepaid",
           sub_total: checkoutTotal,
           length: 10,
           breadth: 10,
@@ -294,7 +398,7 @@ export default function Checkout() {
 
       // Razorpay checkout modal configurations
       const options = {
-        key: "rzp_test_mockkey", // Placeholder test key, will run in test mode
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID, // Razorpay Key ID from environment
         amount: finalAmount * 100, // Razorpay expects paise (₹1 = 100 paise)
         currency: "INR",
         name: "Vistaraa Retail",
@@ -393,7 +497,40 @@ export default function Checkout() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: "40px", alignItems: "start" }} className="checkout-layout-grid">
           {/* Left: Shipping Form */}
           <div className="glass-card" style={{ padding: "32px", background: "var(--bg-card)" }}>
-            <h3 style={{ fontSize: "20px", fontWeight: "800", marginBottom: "24px" }}>Shipping Details</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
+              <h3 style={{ fontSize: "20px", fontWeight: "800", margin: 0 }}>Shipping Details</h3>
+              <button
+                type="button"
+                onClick={handleDetectLocation}
+                disabled={detectingLocation}
+                className="btn btn-secondary"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  fontSize: "13px",
+                  padding: "8px 16px",
+                  borderRadius: "10px",
+                  minHeight: "auto",
+                  border: "1px solid var(--border-color)",
+                  cursor: "pointer",
+                  background: "transparent",
+                  color: "var(--text)",
+                  transition: "all 0.2s ease"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "var(--primary)";
+                  e.currentTarget.style.color = "var(--primary)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "var(--border-color)";
+                  e.currentTarget.style.color = "var(--text)";
+                }}
+              >
+                <MapPin size={15} />
+                {detectingLocation ? "Detecting Location..." : "Use Current Location"}
+              </button>
+            </div>
 
             <form onSubmit={handlePlaceOrder} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }} className="form-row-2">

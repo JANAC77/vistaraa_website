@@ -45,7 +45,7 @@ export default function CartPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             {cart.map((item, index) => (
               <div
-                key={`${item.id}-${item.variantKey}`}
+                key={`${item.id}-${item.variantKey}-${index}`}
                 className="glass-card"
                 style={{
                   display: "flex",
@@ -70,7 +70,7 @@ export default function CartPage() {
                       <span style={{ fontWeight: "700", color: "var(--primary)" }}>SIZE: {item.variantSize}</span>
                     )}
                   </div>
-                  <div style={{ marginTop: "8px", fontWeight: "700" }}>₹{item.salePrice.toLocaleString()}</div>
+                  <div style={{ marginTop: "8px", fontWeight: "700" }}>₹{(item.salePrice || 0).toLocaleString()}</div>
                 </div>
 
                 {/* Quantity Control */}
@@ -99,7 +99,7 @@ export default function CartPage() {
 
                 {/* Subtotal & Delete */}
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "8px", width: "100px" }}>
-                  <span style={{ fontWeight: "800", fontSize: "16px" }}>₹{(item.salePrice * item.quantity).toLocaleString()}</span>
+                  <span style={{ fontWeight: "800", fontSize: "16px" }}>₹{((item.salePrice || 0) * (item.quantity || 1)).toLocaleString()}</span>
                   <button
                     onClick={() => removeFromCart(item.id, item.variantKey)}
                     style={{

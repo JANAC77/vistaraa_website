@@ -39,14 +39,28 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
+  const handleSearchChange = (value) => {
+    setSearchQuery(value);
+    const params = new URLSearchParams(location.search);
+    if (value) {
+      params.set("search", value);
+    } else {
+      params.delete("search");
+    }
+    const isAtShop = location.pathname === "/shop";
+    navigate(`/shop?${params.toString()}`, { replace: isAtShop });
+  };
+
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     setMobileMenuOpen(false);
+    const params = new URLSearchParams(location.search);
     if (searchQuery.trim()) {
-      navigate(`/shop?search=${encodeURIComponent(searchQuery.trim())}`);
+      params.set("search", searchQuery.trim());
     } else {
-      navigate("/shop");
+      params.delete("search");
     }
+    navigate(`/shop?${params.toString()}`);
   };
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -325,11 +339,11 @@ export default function Navbar() {
             type="text"
             placeholder="Search products..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="form-input"
             style={{
               paddingLeft: "40px",
-              paddingRight: "16px",
+              paddingRight: searchQuery ? "36px" : "16px",
               borderRadius: "14px",
               fontSize: "13px",
               height: "40px",
@@ -340,6 +354,31 @@ export default function Navbar() {
             }}
           />
           <Search size={16} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => handleSearchChange("")}
+              style={{
+                position: "absolute",
+                right: "12px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "4px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--text-muted)",
+                borderRadius: "50%"
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.color = "var(--text-main)"}
+              onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-muted)"}
+            >
+              <X size={14} />
+            </button>
+          )}
         </form>
 
         {/* Right Actions */}
@@ -654,11 +693,11 @@ export default function Navbar() {
                 type="text"
                 placeholder="Search products..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="form-input"
                 style={{
                   paddingLeft: "42px",
-                  paddingRight: "16px",
+                  paddingRight: searchQuery ? "38px" : "16px",
                   borderRadius: "14px",
                   fontSize: "14px",
                   height: "44px",
@@ -669,6 +708,31 @@ export default function Navbar() {
                 }}
               />
               <Search size={18} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => handleSearchChange("")}
+                  style={{
+                    position: "absolute",
+                    right: "12px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: "6px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "var(--text-muted)",
+                    borderRadius: "50%"
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = "var(--text-main)"}
+                  onMouseLeave={(e) => e.currentTarget.style.color = "var(--text-muted)"}
+                >
+                  <X size={16} />
+                </button>
+              )}
             </form>
 
             <Link to="/" onClick={() => setMobileMenuOpen(false)}>Home</Link>
