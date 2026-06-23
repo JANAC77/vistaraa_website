@@ -128,11 +128,11 @@ export default function Checkout() {
         if (data.data?.available_courier_companies?.length > 0) {
           const rates = data.data.available_courier_companies.map(c => Number(c.rate));
           const avgRate = Math.min(...rates); // Select cheapest rate
-          setShippingCharges(Math.round(avgRate));
+          setShippingCharges(0); // Free Shipping
         } else {
           // If pincode is not serviceable by Shiprocket
           setShippingError("Pincode is not serviceable. Defaulting to standard shipping.");
-          setShippingCharges(targetMethod === "COD" ? 130 : 80); // Fallback shipping charge
+          setShippingCharges(0); // Free Shipping
         }
       } else {
         throw new Error("API Offline or Pincode verification failed.");
@@ -140,7 +140,7 @@ export default function Checkout() {
     } catch (error) {
       console.warn("Pincode API failed. Fallback to standard shipping:", error);
       // Fallback calculation: standard rate
-      setShippingCharges(targetMethod === "COD" ? 130 : 80);
+      setShippingCharges(0); // Free Shipping
     } finally {
       setCheckingPincode(false);
     }
@@ -407,6 +407,20 @@ export default function Checkout() {
         handler: async function (response) {
           // Payment successful callback execution
           try {
+            // 1. Capture the payment on the backend to avoid it getting stuck in 'Authorized'
+            await fetch(`${BACKEND_API_URL}/api/capture-payment`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${import.meta.env.VITE_JWT_SECRET || "006eb537ffea3dafe0e3a16233c449a1e20510e8f3404b1a456f53cf6ca7f371"}`
+              },
+              body: JSON.stringify({
+                paymentId: response.razorpay_payment_id,
+                amount: finalAmount
+              })
+            }).catch(e => console.warn("Auto-capture failed, may need manual capture:", e));
+
+            // 2. Save order to firestore
             await saveOrderDetails(orderId, response.razorpay_payment_id, "Prepaid");
           } catch (dbError) {
             console.error("Firestore Order Saving Failed:", dbError);

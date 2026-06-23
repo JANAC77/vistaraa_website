@@ -22,6 +22,7 @@ export default function Dashboard() {
     ifsc: ""
   });
   const [imageLink, setImageLink] = useState("");
+  const [imageFile, setImageFile] = useState(null);
   const [submittingReturn, setSubmittingReturn] = useState(false);
 
   useEffect(() => {
@@ -96,7 +97,7 @@ export default function Dashboard() {
         // 5. phoneNumber (int)
         const rawPhone = order.phoneNumber !== undefined && order.phoneNumber !== null ? order.phoneNumber : order.customerPhone;
         const parsedPhone = typeof rawPhone === "number" ? rawPhone : (parseInt(String(rawPhone || "").replace(/\D/g, ""), 10) || 0);
-        if (order.phoneNumber === undefined || order.phoneNumber === null || typeof order.phoneNumber !== "number" || order.phoneNumber !== parsedPhone) {
+        if (order.phoneNumber === undefined || order.phoneNumber !== null || typeof order.phoneNumber !== "number" || order.phoneNumber !== parsedPhone) {
           updates.phoneNumber = parsedPhone;
           order.phoneNumber = parsedPhone;
           needsUpdate = true;
@@ -216,6 +217,39 @@ export default function Dashboard() {
     return diffDays <= 7;
   };
 
+  const checkCancelEligibility = (order) => {
+    const status = (order.orderStatus || order.status || "").toLowerCase();
+    const nonCancellableStatuses = ['shipped', 'delivered', 'return_requested', 'return_approved', 'cancelled', 'refunded'];
+    return !nonCancellableStatuses.includes(status);
+  };
+
+  const handleCancelOrder = async (order) => {
+    if (!window.confirm("Are you sure you want to cancel this order? If prepaid, a refund will be issued automatically.")) return;
+    
+    setLoading(true);
+    try {
+      const response = await fetch("https://vistaraa-server.vercel.app/api/cancel-order", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer 006eb537ffea3dafe0e3a16233c449a1e20510e8f3404b1a456f53cf6ca7f371`
+        },
+        body: JSON.stringify({ orderId: order.id, userId: auth.currentUser.uid })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to cancel order");
+
+      alert("Order cancelled successfully.");
+      fetchOrders();
+    } catch (error) {
+      console.error(error);
+      alert(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleReturnInputChange = (e) => {
     setBankDetails({ ...bankDetails, [e.target.name]: e.target.value });
   };
@@ -230,6 +264,27 @@ export default function Dashboard() {
     setSubmittingReturn(true);
 
     try {
+      let finalImageLink = "";
+      if (imageFile) {
+        const formData = new FormData();
+        formData.append("file", imageFile);
+
+        const uploadResponse = await fetch("https://vistaraa-server.vercel.app/api/upload", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer 006eb537ffea3dafe0e3a16233c449a1e20510e8f3404b1a456f53cf6ca7f371`
+          },
+          body: formData
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error("Failed to upload image. Please try again.");
+        }
+
+        const data = await uploadResponse.json();
+        finalImageLink = data.url;
+      }
+
       const returnRequestRef = doc(db, "users", user.uid, "return_requests", selectedOrder.id);
 
       const returnData = {
@@ -242,7 +297,7 @@ export default function Dashboard() {
           bankName: bankDetails.bankName,
           ifsc: bankDetails.ifsc
         },
-        images: imageLink ? [imageLink] : [getPlaceholderImage(400, 400, "Customer Proof")],
+        images: finalImageLink ? [finalImageLink] : [getPlaceholderImage(400, 400, "Customer Proof")],
         status: "pending",
         totalAmount: selectedOrder.totalAmount,
         createdAt: serverTimestamp()
@@ -330,8 +385,8 @@ export default function Dashboard() {
 
                     <div>
                       <span className={`badge ${order.status === "REFUNDED" ? "badge-out" :
-                          (order.status === "RETURN_APPROVED" ? "badge-new" :
-                            (order.orderStatus === "return_requested" ? "badge-sale" : "badge-new"))
+                        (order.status === "RETURN_APPROVED" ? "badge-new" :
+                          (order.orderStatus === "return_requested" ? "badge-sale" : "badge-new"))
                         }`} style={{ fontSize: "11px", padding: "6px 12px", borderRadius: "8px" }}>
                         {order.status || order.orderStatus || "Placed"}
                       </span>
@@ -364,6 +419,22 @@ export default function Dashboard() {
                     </div>
 
                     <div style={{ display: "flex", gap: "12px" }}>
+                      {checkCancelEligibility(order) && (
+                        <button
+                          onClick={() => handleCancelOrder(order)}
+                          className="btn btn-secondary"
+                          style={{
+                            padding: "8px 18px",
+                            borderRadius: "10px",
+                            fontSize: "12px",
+                            color: "var(--text-main)",
+                            borderColor: "var(--border-color)"
+                          }}
+                        >
+                          <X size={14} /> Cancel Order
+                        </button>
+                      )}
+                      
                       {isEligibleForReturn ? (
                         <button
                           onClick={() => setSelectedOrder(order)}
@@ -381,6 +452,10 @@ export default function Dashboard() {
                       ) : order.orderStatus === "return_requested" ? (
                         <span style={{ color: "var(--warning)", fontWeight: "700", display: "flex", alignItems: "center", gap: "4px" }}>
                           <Clock size={14} /> Return Under Review
+                        </span>
+                      ) : (order.status || order.orderStatus || "").toLowerCase() === "cancelled" ? (
+                        <span style={{ color: "var(--text-muted)", fontWeight: "700", display: "flex", alignItems: "center", gap: "4px" }}>
+                          <X size={14} /> Cancelled
                         </span>
                       ) : order.status === "REFUNDED" ? (
                         <span style={{ color: "var(--success)", fontWeight: "700", display: "flex", alignItems: "center", gap: "4px" }}>
@@ -483,20 +558,25 @@ export default function Dashboard() {
 
               {/* Photo Proof */}
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-muted)" }}>Image URL Proof (Required)</label>
+                <label style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-muted)" }}>Image Proof (Required)</label>
                 <div style={{ position: "relative" }}>
                   <input
-                    type="url"
-                    value={imageLink}
-                    onChange={(e) => setImageLink(e.target.value)}
-                    placeholder="https://example.com/damaged-item.jpg"
-                    required
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      if (e.target.files[0]) {
+                        setImageFile(e.target.files[0]);
+                        setImageLink(""); // Clear manual link if file selected
+                      }
+                    }}
+                    required={!imageLink && !imageFile}
                     className="form-input"
-                    style={{ paddingLeft: "44px" }}
+                    style={{ paddingLeft: "44px", paddingTop: "8px", paddingBottom: "8px" }}
                   />
                   <Camera size={16} style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
                 </div>
-                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Please upload the photo to an image hoster (e.g. Imgur, Postimages) and paste the URL here.</span>
+                {imageFile && <span style={{ fontSize: "12px", color: "var(--primary)", fontWeight: "600", marginTop: "4px" }}>Selected: {imageFile.name}</span>}
+                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Please upload a clear photo showing the issue.</span>
               </div>
 
               {/* Bank Account Details */}
