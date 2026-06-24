@@ -35,6 +35,44 @@ export default function Checkout() {
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [placedOrderId, setPlacedOrderId] = useState("");
   const [detectingLocation, setDetectingLocation] = useState(false);
+  const [sellerData, setSellerData] = useState(null);
+
+  useEffect(() => {
+    const fetchSeller = async () => {
+      // Find first item with a valid sellerId (ignoring "default" which means admin warehouse)
+      const sellerItem = checkoutItems.find(item => item.sellerId && item.sellerId !== "default" && item.sellerId !== "admin");
+      if (sellerItem) {
+        try {
+          const sellerDoc = await getDoc(doc(db, "sellers", sellerItem.sellerId));
+          if (sellerDoc.exists()) {
+            setSellerData({ id: sellerDoc.id, ...sellerDoc.data() });
+          }
+        } catch (e) {
+          console.error("Error fetching seller details:", e);
+        }
+      } else {
+        setSellerData(null);
+      }
+    };
+    if (checkoutItems.length > 0) {
+      fetchSeller();
+    }
+  }, [checkoutItems]);
+
+  const getPickupDetails = () => {
+    if (sellerData) {
+      const pCode = sellerData.pincode || sellerData.pinCode || sellerData.zipCode || sellerData.postalCode || sellerData.pin_code;
+      return {
+        pickup_location: sellerData.id,
+        pickup_pincode: pCode || "583227"
+      };
+    }
+    // Fallback to admin warehouse
+    return {
+      pickup_location: "warehouse",
+      pickup_pincode: "583227"
+    };
+  };
 
   useEffect(() => {
     // Redirect to auth if not logged in
@@ -107,6 +145,8 @@ export default function Checkout() {
     const totalWeight = checkoutItems.reduce((acc, curr) => acc + (0.5 * curr.quantity), 0);
 
     try {
+      const { pickup_pincode } = getPickupDetails();
+
       // API call to backend shipping calculation endpoint
       const response = await fetch(`${BACKEND_API_URL}/api/shipping-charges`, {
         method: "POST",
@@ -118,7 +158,7 @@ export default function Checkout() {
           delivery_pincode: pincode,
           weight: totalWeight,
           cod: targetMethod === "COD",
-          pickup_pincode: "583227"
+          pickup_pincode: pickup_pincode
         })
       });
 
@@ -128,11 +168,11 @@ export default function Checkout() {
         if (data.data?.available_courier_companies?.length > 0) {
           const rates = data.data.available_courier_companies.map(c => Number(c.rate));
           const avgRate = Math.min(...rates); // Select cheapest rate
-          setShippingCharges(0); // Free Shipping
+          setShippingCharges(Math.round(avgRate));
         } else {
           // If pincode is not serviceable by Shiprocket
           setShippingError("Pincode is not serviceable. Defaulting to standard shipping.");
-          setShippingCharges(0); // Free Shipping
+          setShippingCharges(targetMethod === "COD" ? 130 : 80); // Fallback shipping charge
         }
       } else {
         throw new Error("API Offline or Pincode verification failed.");
@@ -140,7 +180,7 @@ export default function Checkout() {
     } catch (error) {
       console.warn("Pincode API failed. Fallback to standard shipping:", error);
       // Fallback calculation: standard rate
-      setShippingCharges(0); // Free Shipping
+      setShippingCharges(targetMethod === "COD" ? 130 : 80);
     } finally {
       setCheckingPincode(false);
     }
@@ -250,12 +290,15 @@ export default function Checkout() {
     const newOrderRef = doc(collection(db, "users", user.uid, "orders"), orderId);
 
     const totalQuantity = checkoutItems.reduce((acc, curr) => acc + (Number(curr.quantity) || 1), 0);
+    const sellerItem = checkoutItems.find(item => item.sellerId && item.sellerId !== "default" && item.sellerId !== "admin");
+    const assignedSellerId = sellerItem?.sellerId || "admin";
 
     const orderData = {
       // Legacy website compatibility fields
       id: orderId,
       order_id: orderId,
       user_id: user.uid,
+      sellerId: assignedSellerId,
       customerName: name,
       customerPhone: phone,
       customerEmail: email,
@@ -303,6 +346,10 @@ export default function Checkout() {
     // 1. Write order to user's Firestore orders collection
     await setDoc(newOrderRef, orderData);
 
+    // 1.5 Write order to global orders collection for Seller Panel
+    const globalOrderRef = doc(collection(db, "orders"), orderId);
+    await setDoc(globalOrderRef, orderData);
+
     // 2. Try to sync order with backend / Shiprocket API flow
     try {
       const nameParts = name.trim().split(/\s+/);
@@ -311,6 +358,8 @@ export default function Checkout() {
 
       const d = new Date();
       const orderDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+      const { pickup_location } = getPickupDetails();
 
       await fetch(`${BACKEND_API_URL}/api/create-order`, {
         method: "POST",
@@ -322,7 +371,7 @@ export default function Checkout() {
           order_id: orderId,
           user_id: user.uid,
           order_date: orderDateStr,
-          pickup_location: "warehouse",
+          pickup_location: pickup_location,
           billing_customer_name: firstName,
           billing_last_name: lastName,
           billing_address: address,
@@ -466,6 +515,27 @@ export default function Checkout() {
                 ? "Thank you for shopping with Vistaraa. Your cash on delivery order has been registered and is being processed."
                 : "Thank you for shopping with Vistaraa. Your payment was processed successfully."}
             </p>
+
+            {checkoutItems.length > 0 && (
+              <div style={{ display: "flex", gap: "12px", justifyContent: "center", marginBottom: "24px", flexWrap: "wrap" }}>
+                {checkoutItems.map((item, idx) => (
+                  <div key={idx} style={{
+                    width: "64px",
+                    height: "64px",
+                    borderRadius: "12px",
+                    overflow: "hidden",
+                    border: "1px solid var(--border-color)",
+                    background: "var(--bg-app)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}>
+                    <img src={item.image || getPlaceholderImage(100, 100, "Item")} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div style={{ background: "var(--bg-app)", padding: "16px", borderRadius: "16px", border: "1px solid var(--border-color)", textAlign: "left", fontSize: "14px", marginBottom: "32px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
                 <span style={{ color: "var(--text-muted)" }}>Order Reference</span>

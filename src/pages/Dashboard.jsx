@@ -207,7 +207,8 @@ export default function Dashboard() {
   };
 
   const checkReturnEligibility = (order) => {
-    if (order.orderStatus === "return_requested" || order.status === "return_requested" || order.status === "REFUNDED" || order.status === "RETURN_APPROVED") {
+    const status = (order.orderStatus || order.status || "").toLowerCase();
+    if (status === "return_requested" || status === "refunded" || status === "return_approved" || status === "cancelled") {
       return false;
     }
 
@@ -256,7 +257,10 @@ export default function Dashboard() {
 
   const handleSubmitReturn = async (e) => {
     e.preventDefault();
-    if (!bankDetails.name || !bankDetails.accNo || !bankDetails.bankName || !bankDetails.ifsc) {
+    
+    const isPrepaid = selectedOrder?.paymentMethod === "Prepaid" || (selectedOrder?.paymentId && selectedOrder?.paymentId.startsWith("pay_"));
+
+    if (!isPrepaid && (!bankDetails.name || !bankDetails.accNo || !bankDetails.bankName || !bankDetails.ifsc)) {
       alert("Please fill in all refund bank account details.");
       return;
     }
@@ -580,8 +584,9 @@ export default function Dashboard() {
               </div>
 
               {/* Bank Account Details */}
-              <div style={{ background: "rgba(16, 185, 129, 0.05)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: "18px", padding: "20px" }}>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center", color: "var(--success)", fontWeight: "700", fontSize: "14px", marginBottom: "16px" }}>
+              {!(selectedOrder?.paymentMethod === "Prepaid" || (selectedOrder?.paymentId && selectedOrder?.paymentId.startsWith("pay_"))) && (
+                <div style={{ background: "rgba(16, 185, 129, 0.05)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: "18px", padding: "20px" }}>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center", color: "var(--success)", fontWeight: "700", fontSize: "14px", marginBottom: "16px" }}>
                   <IndianRupee size={18} />
                   <span>Refund Bank Account Details</span>
                 </div>
@@ -603,8 +608,9 @@ export default function Dashboard() {
                     <label style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)" }}>IFSC Code</label>
                     <input type="text" name="ifsc" value={bankDetails.ifsc} onChange={handleReturnInputChange} required placeholder="e.g. HDFC0001234" className="form-input" style={{ padding: "10px 14px", fontSize: "13px" }} />
                   </div>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Submit Buttons */}
               <div style={{ display: "flex", gap: "16px", marginTop: "12px", borderTop: "1px solid var(--border-color)", paddingTop: "16px" }}>
