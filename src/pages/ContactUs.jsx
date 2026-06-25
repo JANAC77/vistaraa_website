@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Mail, Phone, MapPin, Send, MessageSquare, Check, AlertCircle } from "lucide-react";
 
+const BACKEND_API_URL = import.meta.env.VITE_BACKEND_API_URL || "https://vistaraa-server.vercel.app";
+
 export default function ContactUs() {
   const [formData, setFormData] = useState({ name: "", email: "", message: "" });
   const [submitting, setSubmitting] = useState(false);
@@ -11,7 +13,7 @@ export default function ContactUs() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name || !formData.email || !formData.message) {
       setStatus("error");
@@ -21,12 +23,27 @@ export default function ContactUs() {
     setSubmitting(true);
     setStatus(null);
 
-    // Mock successful submission delay
-    setTimeout(() => {
+    try {
+      const response = await fetch(`${BACKEND_API_URL}/api/contact-us`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData)
+      });
+
+      if (response.ok) {
+        setStatus("success");
+        setFormData({ name: "", email: "", message: "" });
+      } else {
+        setStatus("error");
+      }
+    } catch (error) {
+      console.error("Contact form submission error:", error);
+      setStatus("error");
+    } finally {
       setSubmitting(false);
-      setStatus("success");
-      setFormData({ name: "", email: "", message: "" });
-    }, 1500);
+    }
   };
 
   return (

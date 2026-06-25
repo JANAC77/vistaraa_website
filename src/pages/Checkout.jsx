@@ -75,42 +75,44 @@ export default function Checkout() {
   };
 
   useEffect(() => {
-    // Redirect to auth if not logged in
-    const user = auth.currentUser;
-    if (!user) {
-      navigate("/auth?redirect=checkout");
-      return;
-    }
+    // Wait for auth to finish loading before redirecting
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (!user) {
+        navigate("/auth?redirect=checkout");
+      } else {
+        // Autofill user details if available
+        setFormData(prev => ({
+          ...prev,
+          name: user.displayName || "",
+          email: user.email || ""
+        }));
 
-    // Autofill user details if available
-    setFormData(prev => ({
-      ...prev,
-      name: user.displayName || "",
-      email: user.email || ""
-    }));
-
-    // Fetch extra details from Firestore to autofill shipping address
-    const fetchProfileDetails = async () => {
-      try {
-        const userDocRef = doc(db, "users", user.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          const data = userDocSnap.data();
-          setFormData(prev => ({
-            ...prev,
-            name: user.displayName || data.name || prev.name,
-            phone: data.phone || prev.phone,
-            address: data.address || prev.address,
-            city: data.city || prev.city,
-            state: data.state || prev.state,
-            pincode: data.pincode || prev.pincode
-          }));
-        }
-      } catch (err) {
-        console.error("Error fetching profile details for checkout:", err);
+        // Fetch extra details from Firestore to autofill shipping address
+        const fetchProfileDetails = async () => {
+          try {
+            const userDocRef = doc(db, "users", user.uid);
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+              const data = userDocSnap.data();
+              setFormData(prev => ({
+                ...prev,
+                name: user.displayName || data.name || prev.name,
+                phone: data.phone || prev.phone,
+                address: data.address || prev.address,
+                city: data.city || prev.city,
+                state: data.state || prev.state,
+                pincode: data.pincode || prev.pincode
+              }));
+            }
+          } catch (err) {
+            console.error("Error fetching profile details for checkout:", err);
+          }
+        };
+        fetchProfileDetails();
       }
-    };
-    fetchProfileDetails();
+    });
+
+    return () => unsubscribe();
   }, [navigate]);
 
   if (checkoutItems.length === 0 && !orderPlaced) {
@@ -350,6 +352,12 @@ export default function Checkout() {
     const globalOrderRef = doc(collection(db, "orders"), orderId);
     await setDoc(globalOrderRef, orderData);
 
+    // 1.6 Write order to specific seller's orders collection
+    if (assignedSellerId && assignedSellerId !== "admin" && assignedSellerId !== "default") {
+      const sellerOrderRef = doc(collection(db, "sellers", assignedSellerId, "orders"), orderId);
+      await setDoc(sellerOrderRef, orderData);
+    }
+
     // 2. Try to sync order with backend / Shiprocket API flow
     try {
       const nameParts = name.trim().split(/\s+/);
@@ -386,7 +394,8 @@ export default function Checkout() {
             name: item.name,
             sku: item.sku || item.id,
             units: item.quantity,
-            selling_price: item.salePrice
+            selling_price: item.salePrice,
+            image: item.image
           })),
           payment_method: paymentStatus === "COD" ? "COD" : "Prepaid",
           sub_total: checkoutTotal,
