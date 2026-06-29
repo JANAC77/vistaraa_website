@@ -189,72 +189,13 @@ export default function Home() {
                   zIndex: index === activeSlide ? 1 : 0
                 }}
               >
-                {/* Background Poster Image & Gradient Overlay */}
+                {/* Background Poster Image */}
                 <div style={{ position: "absolute", inset: 0, zIndex: 1 }}>
                   <img
                     src={poster.image}
                     alt={poster.title}
-                    style={{ width: "100%", height: "100%", objectFit: "cover", filter: "brightness(0.55)" }}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
                   />
-                  <div style={{
-                    position: "absolute",
-                    inset: 0,
-                    background: "radial-gradient(circle at 20% 50%, rgba(15, 23, 42, 0.6) 0%, rgba(15, 23, 42, 0.35) 50%, rgba(9, 10, 15, 0.85) 100%)"
-                  }}></div>
-                </div>
-
-                {/* Text Content Overlay */}
-                <div className="container" style={{ position: "relative", zIndex: 2, color: "white", maxWidth: "800px" }}>
-                  <div className="fade-in-up" style={{ padding: "0 20px" }}>
-                    <span style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      background: "rgba(255, 255, 255, 0.15)",
-                      backdropFilter: "blur(4px)",
-                      padding: "8px 16px",
-                      borderRadius: "99px",
-                      fontSize: "12px",
-                      fontWeight: "700",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.1em",
-                      marginBottom: "20px"
-                    }}>
-                      <Sparkles size={14} color="var(--accent)" fill="var(--accent)" style={{ opacity: 0.85 }} /> Exclusive Selection
-                    </span>
-                    <h1 style={{
-                      fontFamily: "var(--font-heading)",
-                      fontSize: "clamp(32px, 6vw, 64px)",
-                      fontWeight: "900",
-                      lineHeight: "1.1",
-                      marginBottom: "20px",
-                      color: "white",
-                      letterSpacing: "-0.03em"
-                    }}>
-                      {poster.title}
-                    </h1>
-                    <p style={{
-                      fontSize: "clamp(14px, 2.5vw, 18px)",
-                      color: "rgba(255, 255, 255, 0.8)",
-                      marginBottom: "32px",
-                      fontWeight: "500",
-                      lineHeight: "1.6",
-                      letterSpacing: "0.01em"
-                    }}>
-                      {poster.subContents}
-                    </p>
-                    <Link to="/shop" className="btn btn-primary" style={{
-                      padding: "16px 36px",
-                      borderRadius: "18px",
-                      fontSize: "15px",
-                      background: "linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)",
-                      border: "none",
-                      boxShadow: "0 10px 25px var(--primary-glow)",
-                      fontWeight: "800"
-                    }}>
-                      Explore Collection <ArrowRight size={18} />
-                    </Link>
-                  </div>
                 </div>
               </div>
             ))}
