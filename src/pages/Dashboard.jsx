@@ -23,6 +23,7 @@ export default function Dashboard() {
   });
   const [imageLink, setImageLink] = useState("");
   const [imageFile, setImageFile] = useState(null);
+  const [returnItems, setReturnItems] = useState([]);
   const [submittingReturn, setSubmittingReturn] = useState(false);
 
   // Exchange Request Modal State
@@ -278,6 +279,11 @@ export default function Dashboard() {
       return;
     }
 
+    if (returnItems.length === 0) {
+      alert("Please select at least one item to return.");
+      return;
+    }
+
     setSubmittingReturn(true);
 
     try {
@@ -316,6 +322,7 @@ export default function Dashboard() {
         },
         images: finalImageLink ? [finalImageLink] : [getPlaceholderImage(400, 400, "Customer Proof")],
         status: "pending",
+        returnedItems: returnItems,
         totalAmount: selectedOrder.totalAmount,
         createdAt: serverTimestamp()
       };
@@ -323,11 +330,22 @@ export default function Dashboard() {
       // 1. Write return request to users/{userId}/return_requests/{orderId}
       await setDoc(returnRequestRef, returnData);
 
-      // 2. Update order status in user orders collection
+      // 2. Update order products in user orders collection
       const orderRef = doc(db, "users", user.uid, "orders", selectedOrder.id);
+      
+      const updatedProducts = selectedOrder.products.map(p => {
+        if (returnItems.some(ri => ri.id === p.id && (ri.variantSize === p.variantSize || !p.variantSize))) {
+          return { ...p, returnStatus: 'return_requested' };
+        }
+        return p;
+      });
+
+      const allReturnedOrExchanged = updatedProducts.every(p => p.returnStatus || p.exchangeStatus);
+
       await updateDoc(orderRef, {
-        orderStatus: "return_requested",
-        status: "RETURN_REQUESTED"
+        products: updatedProducts,
+        orderStatus: allReturnedOrExchanged ? "return_requested" : "partial_return_requested",
+        status: allReturnedOrExchanged ? "RETURN_REQUESTED" : "PARTIAL_RETURN"
       });
 
       alert("Return request submitted successfully. Our admin team will inspect the proof details.");
@@ -336,8 +354,10 @@ export default function Dashboard() {
       // Clear inputs
       setReturnReason("Damaged Product");
       setComments("");
+      setReturnItems([]);
       setBankDetails({ name: "", accNo: "", bankName: "", ifsc: "" });
       setImageLink("");
+      setImageFile(null);
 
       // Refresh order list
       await fetchOrders(user.uid);
@@ -349,12 +369,22 @@ export default function Dashboard() {
     }
   };
 
-  const handleToggleExchangeItem = async (product) => {
-    const existingIndex = exchangeItems.findIndex(item => item.id === product.id && item.variantKey === product.variantKey);
-    if (existingIndex >= 0) {
-      setExchangeItems(prev => prev.filter((_, i) => i !== existingIndex));
+  const handleToggleReturnItem = (product) => {
+    if (returnItems.some(item => item.id === product.id && (item.variantSize === product.variantSize || !product.variantSize))) {
+      setReturnItems(prev => prev.filter(item => !(item.id === product.id && (item.variantSize === product.variantSize || !product.variantSize))));
     } else {
-      setExchangeItems(prev => [...prev, { ...product, newVariantSize: "", newVariantSku: "" }]);
+      setReturnItems(prev => [...prev, product]);
+    }
+  };
+
+  const handleToggleExchangeItem = async (product) => {
+    // If selecting an item that hasn't been exchanged yet
+    if (exchangeItems.some(item => item.id === product.id && item.variantKey === (product.variantSize || 'default'))) {
+      setExchangeItems(prev => prev.filter(item => !(item.id === product.id && item.variantKey === (product.variantSize || 'default'))));
+    } else {
+      const variantKey = product.variantSize || 'default';
+      const newItem = { ...product, variantKey, newVariantSize: null };
+      setExchangeItems(prev => [...prev, newItem]);
 
       const prodId = product.productid || product.id;
       if (!productVariantsCache[prodId]) {
@@ -448,6 +478,23 @@ export default function Dashboard() {
         throw new Error(errorData.error || "Failed to submit exchange");
       }
 
+      const updatedProducts = exchangeOrder.products.map(p => {
+        if (exchangeItems.some(ei => ei.id === p.id && (ei.variantSize === p.variantSize || !p.variantSize))) {
+          return { ...p, exchangeStatus: 'exchange_requested' };
+        }
+        return p;
+      });
+
+      const allReturnedOrExchanged = updatedProducts.every(p => p.returnStatus || p.exchangeStatus);
+
+      // Also update local order document to reflect status
+      const orderRef = doc(db, "users", user.uid, "orders", exchangeOrder.id);
+      await updateDoc(orderRef, {
+        products: updatedProducts,
+        orderStatus: allReturnedOrExchanged ? "exchange_requested" : "partial_exchange_requested",
+        status: allReturnedOrExchanged ? "EXCHANGE_REQUESTED" : "PARTIAL_EXCHANGE"
+      });
+
       alert("Exchange request submitted successfully!");
       setExchangeOrder(null);
       setExchangeReason("Size Issue");
@@ -535,9 +582,21 @@ export default function Dashboard() {
                         </div>
                         <div style={{ flexGrow: 1 }}>
                           <h4 style={{ fontSize: "14px", fontWeight: "700" }}>{prod.name}</h4>
-                          <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                          <span style={{ fontSize: "12px", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>
                             Quantity: {prod.quantity} {prod.variantSize && `| Size: ${prod.variantSize}`}
                           </span>
+                          
+                          {/* Item Level Badges */}
+                          {prod.returnStatus && (
+                            <span className="badge badge-sale" style={{ fontSize: "10px", padding: "4px 8px", borderRadius: "6px", display: "inline-block", marginRight: "6px" }}>
+                              Return: {prod.returnStatus.replace('_', ' ')}
+                            </span>
+                          )}
+                          {prod.exchangeStatus && (
+                            <span className="badge badge-new" style={{ fontSize: "10px", padding: "4px 8px", borderRadius: "6px", display: "inline-block" }}>
+                              Exchange: {prod.exchangeStatus.replace('_', ' ')}
+                            </span>
+                          )}
                         </div>
                         <span style={{ fontWeight: "700", fontSize: "14px" }}>₹{Number(prod.salePrice || prod.price).toLocaleString()}</span>
                       </div>
@@ -670,6 +729,38 @@ export default function Dashboard() {
             </div>
 
             <form onSubmit={handleSubmitReturn} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+
+              {/* Items Selection */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <label style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-muted)" }}>Select Items to Return</label>
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px", border: "1px solid var(--border-color)", borderRadius: "12px", padding: "16px", background: "rgba(0,0,0,0.02)" }}>
+                  {selectedOrder.products?.map((prod, i) => {
+                    const isSelected = returnItems.some(item => item.id === prod.id && (item.variantSize === prod.variantSize || !prod.variantSize));
+                    const isAlreadyReturned = prod.returnStatus || prod.exchangeStatus; // Disable if already requested
+                    
+                    return (
+                      <div key={i} style={{ display: "flex", flexDirection: "column", gap: "12px", borderBottom: i < selectedOrder.products.length - 1 ? "1px solid var(--border-color)" : "none", paddingBottom: i < selectedOrder.products.length - 1 ? "12px" : "0", opacity: isAlreadyReturned ? 0.5 : 1 }}>
+                        <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: isAlreadyReturned ? "not-allowed" : "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={isAlreadyReturned}
+                            onChange={() => handleToggleReturnItem(prod)}
+                            style={{ marginTop: "4px" }}
+                          />
+                          <div style={{ flexGrow: 1 }}>
+                            <div style={{ fontSize: "14px", fontWeight: "700" }}>{prod.name}</div>
+                            <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                              Size: {prod.variantSize || "Standard"} | Qty: {prod.quantity}
+                              {isAlreadyReturned && <span style={{ color: "var(--warning)", marginLeft: "8px", fontWeight: "600" }}>(Already Requested)</span>}
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
               {/* Return Details */}
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -824,13 +915,15 @@ export default function Dashboard() {
                     const selectedExchangeItem = exchangeItems.find(item => item.id === prod.id && item.variantKey === prod.variantKey);
                     const prodId = prod.productid || prod.id;
                     const availableVariants = productVariantsCache[prodId] || [];
+                    const isAlreadyRequested = prod.returnStatus || prod.exchangeStatus;
 
                     return (
-                      <div key={i} style={{ display: "flex", flexDirection: "column", gap: "12px", borderBottom: i < exchangeOrder.products.length - 1 ? "1px solid var(--border-color)" : "none", paddingBottom: i < exchangeOrder.products.length - 1 ? "12px" : "0" }}>
-                        <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+                      <div key={i} style={{ display: "flex", flexDirection: "column", gap: "12px", borderBottom: i < exchangeOrder.products.length - 1 ? "1px solid var(--border-color)" : "none", paddingBottom: i < exchangeOrder.products.length - 1 ? "12px" : "0", opacity: isAlreadyRequested ? 0.5 : 1 }}>
+                        <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: isAlreadyRequested ? "not-allowed" : "pointer" }}>
                           <input
                             type="checkbox"
                             checked={isSelected}
+                            disabled={isAlreadyRequested}
                             onChange={() => handleToggleExchangeItem(prod)}
                             style={{ marginTop: "4px" }}
                           />
@@ -838,6 +931,7 @@ export default function Dashboard() {
                             <div style={{ fontSize: "14px", fontWeight: "700" }}>{prod.name}</div>
                             <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
                               Current Size: {prod.variantSize || "Standard"} | Qty: {prod.quantity}
+                              {isAlreadyRequested && <span style={{ color: "var(--warning)", marginLeft: "8px", fontWeight: "600" }}>(Already Requested)</span>}
                             </div>
                           </div>
                         </label>
