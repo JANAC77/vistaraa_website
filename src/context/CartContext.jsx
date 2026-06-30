@@ -169,6 +169,8 @@ export function CartProvider({ children }) {
         } catch (err) {
           console.error("Error syncing cart with Firestore:", err);
         }
+      } else {
+        setCart([]);
       }
       setSyncReady(true);
     });
@@ -176,7 +178,7 @@ export function CartProvider({ children }) {
     return () => unsubscribe();
   }, []);
 
-  const addToCart = (product, selectedVariant = null, quantity = 1) => {
+  const addToCart = async (product, selectedVariant = null, quantity = 1) => {
     const variantKey = selectedVariant ? selectedVariant.sku || selectedVariant.size : "default";
     const cartId = `${product.id}_${variantKey}`;
     const priceToUse = selectedVariant ? Number(selectedVariant.price) : Number(product.salePrice || product.price || 0);
@@ -200,87 +202,101 @@ export function CartProvider({ children }) {
       quantity,
     };
 
-    setCart((prevCart) => {
-      const existingIndex = prevCart.findIndex(
-        (item) => item.id === product.id && item.variantKey === variantKey
-      );
+    const existingIndex = cart.findIndex(
+      (item) => item.id === product.id && item.variantKey === variantKey
+    );
 
-      if (existingIndex > -1) {
-        const updated = [...prevCart];
-        const newQty = updated[existingIndex].quantity + quantity;
-        updated[existingIndex].quantity = newQty;
+    if (existingIndex > -1) {
+      const newQty = cart[existingIndex].quantity + quantity;
 
-        if (auth.currentUser) {
-          updateDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId), {
+      if (auth.currentUser) {
+        try {
+          await updateDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId), {
             quantity: newQty
-          }).catch(err => console.error("Firestore update cart quantity error:", err));
+          });
+        } catch (err) {
+          console.error("Firestore update cart quantity error:", err);
         }
+      }
 
+      setCart(prevCart => {
+        const updated = [...prevCart];
+        updated[existingIndex].quantity = newQty;
         return updated;
-      }
+      });
+      return;
+    }
 
-      if (auth.currentUser) {
-        const mapped = {
-          cartId,
-          customerId: auth.currentUser.uid,
-          productid: product.id,
-          quantity,
-          sizeVariant: newItem.variantSize ? {
-            size: newItem.variantSize,
-            color: null,
-            stock: 0,
-            skuSuffix: null
-          } : null,
-          ...newItem
-        };
-        setDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId), mapped)
-          .catch(err => console.error("Firestore add to cart error:", err));
+    if (auth.currentUser) {
+      const mapped = {
+        cartId,
+        customerId: auth.currentUser.uid,
+        productid: product.id,
+        quantity,
+        sizeVariant: newItem.variantSize ? {
+          size: newItem.variantSize,
+          color: null,
+          stock: 0,
+          skuSuffix: null
+        } : null,
+        ...newItem
+      };
+      try {
+        await setDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId), mapped);
+      } catch (err) {
+        console.error("Firestore add to cart error:", err);
       }
+    }
 
-      return [...prevCart, newItem];
-    });
+    setCart(prevCart => [...prevCart, newItem]);
   };
 
-  const removeFromCart = (id, variantKey) => {
+  const removeFromCart = async (id, variantKey) => {
     const cartId = `${id}_${variantKey}`;
-    setCart((prevCart) => {
-      if (auth.currentUser) {
-        deleteDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId))
-          .catch(err => console.error("Firestore delete from cart error:", err));
+    if (auth.currentUser) {
+      try {
+        await deleteDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId));
+      } catch (err) {
+        console.error("Firestore delete from cart error:", err);
+        return; // Exit if failed, keeping state intact
       }
-      return prevCart.filter((item) => !(item.id === id && item.variantKey === variantKey));
-    });
+    }
+    setCart((prevCart) => prevCart.filter((item) => !(item.id === id && item.variantKey === variantKey)));
   };
 
-  const updateQuantity = (id, variantKey, quantity) => {
+  const updateQuantity = async (id, variantKey, quantity) => {
     if (quantity <= 0) {
-      removeFromCart(id, variantKey);
+      await removeFromCart(id, variantKey);
       return;
     }
     const cartId = `${id}_${variantKey}`;
-    setCart((prevCart) => {
-      if (auth.currentUser) {
-        updateDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId), {
+    if (auth.currentUser) {
+      try {
+        await updateDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId), {
           quantity: Number(quantity)
-        }).catch(err => console.error("Firestore update cart quantity error:", err));
+        });
+      } catch (err) {
+        console.error("Firestore update cart quantity error:", err);
+        return;
       }
-      return prevCart.map((item) =>
-        item.id === id && item.variantKey === variantKey ? { ...item, quantity } : item
-      );
-    });
+    }
+    setCart((prevCart) => prevCart.map((item) =>
+      item.id === id && item.variantKey === variantKey ? { ...item, quantity } : item
+    ));
   };
 
-  const clearCart = () => {
-    setCart((prevCart) => {
-      if (auth.currentUser) {
-        prevCart.forEach(item => {
-          const cartId = item.variantKey ? `${item.id}_${item.variantKey}` : item.id;
-          deleteDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId))
-            .catch(err => console.error("Firestore clear cart item error:", err));
-        });
+  const clearCart = async () => {
+    if (auth.currentUser) {
+      for (const item of cart) {
+        const cartId = item.variantKey ? `${item.id}_${item.variantKey}` : item.id;
+        try {
+          await deleteDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId));
+        } catch (err) {
+          console.error("Firestore clear cart item error:", err);
+        }
       }
-      return [];
-    });
+    }
+    setCart([]);
   };
 
   const cartTotal = cart.reduce((total, item) => total + item.salePrice * item.quantity, 0);

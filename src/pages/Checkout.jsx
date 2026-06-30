@@ -398,7 +398,7 @@ export default function Checkout() {
             image: item.image
           })),
           payment_method: paymentStatus === "COD" ? "COD" : "Prepaid",
-          sub_total: checkoutTotal,
+          sub_total: finalAmount,
           length: 10,
           breadth: 10,
           height: 10,

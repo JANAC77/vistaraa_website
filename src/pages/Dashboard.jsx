@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
-import { collection, getDocs, doc, setDoc, updateDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
-import { Package, RotateCcw, Clock, CheckCircle, ShieldAlert, X, IndianRupee, Camera, Eye } from "lucide-react";
+import { collection, getDocs, getDoc, doc, setDoc, updateDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { Package, RotateCcw, RefreshCcw, Clock, CheckCircle, ShieldAlert, X, IndianRupee, Camera, Eye } from "lucide-react";
 import { getPlaceholderImage } from "../utils/placeholder";
 
 export default function Dashboard() {
@@ -24,6 +24,15 @@ export default function Dashboard() {
   const [imageLink, setImageLink] = useState("");
   const [imageFile, setImageFile] = useState(null);
   const [submittingReturn, setSubmittingReturn] = useState(false);
+
+  // Exchange Request Modal State
+  const [exchangeOrder, setExchangeOrder] = useState(null);
+  const [exchangeReason, setExchangeReason] = useState("Size Issue");
+  const [exchangeComments, setExchangeComments] = useState("");
+  const [exchangeItems, setExchangeItems] = useState([]);
+  const [exchangeImageFile, setExchangeImageFile] = useState(null);
+  const [submittingExchange, setSubmittingExchange] = useState(false);
+  const [productVariantsCache, setProductVariantsCache] = useState({});
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
@@ -208,7 +217,11 @@ export default function Dashboard() {
 
   const checkReturnEligibility = (order) => {
     const status = (order.orderStatus || order.status || "").toLowerCase();
-    if (status === "return_requested" || status === "refunded" || status === "return_approved" || status === "cancelled") {
+    const ineligibleStatuses = [
+      "return_requested", "refunded", "return_approved", "cancelled",
+      "exchange_requested", "exchange_approved", "forward_shipped"
+    ];
+    if (ineligibleStatuses.includes(status)) {
       return false;
     }
 
@@ -226,7 +239,7 @@ export default function Dashboard() {
 
   const handleCancelOrder = async (order) => {
     if (!window.confirm("Are you sure you want to cancel this order? If prepaid, a refund will be issued automatically.")) return;
-    
+
     setLoading(true);
     try {
       const response = await fetch("https://vistaraa-server.vercel.app/api/cancel-order", {
@@ -257,7 +270,7 @@ export default function Dashboard() {
 
   const handleSubmitReturn = async (e) => {
     e.preventDefault();
-    
+
     const isPrepaid = selectedOrder?.paymentMethod === "Prepaid" || (selectedOrder?.paymentId && selectedOrder?.paymentId.startsWith("pay_"));
 
     if (!isPrepaid && (!bankDetails.name || !bankDetails.accNo || !bankDetails.bankName || !bankDetails.ifsc)) {
@@ -336,6 +349,121 @@ export default function Dashboard() {
     }
   };
 
+  const handleToggleExchangeItem = async (product) => {
+    const existingIndex = exchangeItems.findIndex(item => item.id === product.id && item.variantKey === product.variantKey);
+    if (existingIndex >= 0) {
+      setExchangeItems(prev => prev.filter((_, i) => i !== existingIndex));
+    } else {
+      setExchangeItems(prev => [...prev, { ...product, newVariantSize: "", newVariantSku: "" }]);
+
+      const prodId = product.productid || product.id;
+      if (!productVariantsCache[prodId]) {
+        try {
+          const docRef = doc(db, "products", prodId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setProductVariantsCache(prev => ({ ...prev, [prodId]: docSnap.data().variants || [] }));
+          }
+        } catch (err) {
+          console.error("Failed to fetch product variants:", err);
+        }
+      }
+    }
+  };
+
+  const handleExchangeVariantSelect = (productId, variantKey, selectedVariant) => {
+    setExchangeItems(prev => prev.map(item => {
+      if (item.id === productId && item.variantKey === variantKey) {
+        // Retain the original purchase price (item.price) to avoid charging the user for price fluctuations over time.
+        // Price differences would only apply if we allowed selecting entirely different products.
+        return { 
+          ...item, 
+          newVariantSize: selectedVariant.size, 
+          newVariantSku: selectedVariant.sku, 
+          newVariantPrice: item.price 
+        };
+      }
+      return item;
+    }));
+  };
+
+  const handleSubmitExchange = async (e) => {
+    e.preventDefault();
+
+    if (exchangeItems.length === 0) {
+      alert("Please select at least one item to exchange.");
+      return;
+    }
+
+    if (!exchangeImageFile) {
+      alert("Please upload an image proof.");
+      return;
+    }
+
+    setSubmittingExchange(true);
+
+    try {
+      let finalImageLink = "";
+      const formData = new FormData();
+      formData.append("file", exchangeImageFile);
+
+      const uploadResponse = await fetch("https://vistaraa-server.vercel.app/api/upload", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer 006eb537ffea3dafe0e3a16233c449a1e20510e8f3404b1a456f53cf6ca7f371`
+        },
+        body: formData
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error("Failed to upload image. Please try again.");
+      }
+
+      const data = await uploadResponse.json();
+      finalImageLink = data.url;
+
+      const payload = {
+        orderId: exchangeOrder.id,
+        userId: user.uid,
+        reason: exchangeReason,
+        manualReason: exchangeComments,
+        itemsToExchange: exchangeItems.map(item => ({
+          ...item,
+          image: finalImageLink // attaching the proof to the item for admin visibility
+        })),
+        images: [finalImageLink]
+      };
+
+      const response = await fetch("https://vistaraa-server.vercel.app/api/request-exchange", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer 006eb537ffea3dafe0e3a16233c449a1e20510e8f3404b1a456f53cf6ca7f371`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to submit exchange");
+      }
+
+      alert("Exchange request submitted successfully!");
+      setExchangeOrder(null);
+      setExchangeReason("Size Issue");
+      setExchangeComments("");
+      setExchangeItems([]);
+      setExchangeImageFile(null);
+      await fetchOrders(user.uid);
+
+    } catch (error) {
+      console.error("Exchange submission failed:", error);
+      alert(error.message);
+    } finally {
+      setSubmittingExchange(false);
+    }
+  };
+
   return (
     <div style={{ paddingTop: "120px", paddingBottom: "80px", minHeight: "90vh" }}>
       <div className="container">
@@ -388,11 +516,11 @@ export default function Dashboard() {
                     </div>
 
                     <div>
-                      <span className={`badge ${order.status === "REFUNDED" ? "badge-out" :
-                        (order.status === "RETURN_APPROVED" ? "badge-new" :
+                      <span className={`badge ${order.orderStatus === "refunded" ? "badge-out" :
+                        (order.orderStatus === "return_approved" ? "badge-new" :
                           (order.orderStatus === "return_requested" ? "badge-sale" : "badge-new"))
                         }`} style={{ fontSize: "11px", padding: "6px 12px", borderRadius: "8px" }}>
-                        {order.status || order.orderStatus || "Placed"}
+                        {order.orderStatus ? order.orderStatus.replace('_', ' ') : (order.status || "Placed")}
                       </span>
                     </div>
                   </div>
@@ -438,24 +566,43 @@ export default function Dashboard() {
                           <X size={14} /> Cancel Order
                         </button>
                       )}
-                      
+
                       {isEligibleForReturn ? (
-                        <button
-                          onClick={() => setSelectedOrder(order)}
-                          className="btn btn-secondary"
-                          style={{
-                            padding: "8px 18px",
-                            borderRadius: "10px",
-                            fontSize: "12px",
-                            color: "var(--accent)",
-                            borderColor: "rgba(244, 63, 94, 0.2)"
-                          }}
-                        >
-                          <RotateCcw size={14} /> Request Return
-                        </button>
+                        <>
+                          <button
+                            onClick={() => setSelectedOrder(order)}
+                            className="btn btn-secondary"
+                            style={{
+                              padding: "8px 18px",
+                              borderRadius: "10px",
+                              fontSize: "12px",
+                              color: "var(--accent)",
+                              borderColor: "rgba(244, 63, 94, 0.2)"
+                            }}
+                          >
+                            <RotateCcw size={14} /> Request Return
+                          </button>
+                          <button
+                            onClick={() => setExchangeOrder(order)}
+                            className="btn btn-secondary"
+                            style={{
+                              padding: "8px 18px",
+                              borderRadius: "10px",
+                              fontSize: "12px",
+                              color: "var(--primary)",
+                              borderColor: "var(--primary)"
+                            }}
+                          >
+                            <RefreshCcw size={14} /> Request Exchange
+                          </button>
+                        </>
                       ) : order.orderStatus === "return_requested" ? (
                         <span style={{ color: "var(--warning)", fontWeight: "700", display: "flex", alignItems: "center", gap: "4px" }}>
                           <Clock size={14} /> Return Under Review
+                        </span>
+                      ) : order.orderStatus === "exchange_requested" ? (
+                        <span style={{ color: "var(--warning)", fontWeight: "700", display: "flex", alignItems: "center", gap: "4px" }}>
+                          <Clock size={14} /> Exchange Under Review
                         </span>
                       ) : (order.status || order.orderStatus || "").toLowerCase() === "cancelled" ? (
                         <span style={{ color: "var(--text-muted)", fontWeight: "700", display: "flex", alignItems: "center", gap: "4px" }}>
@@ -587,27 +734,27 @@ export default function Dashboard() {
               {!(selectedOrder?.paymentMethod === "Prepaid" || (selectedOrder?.paymentId && selectedOrder?.paymentId.startsWith("pay_"))) && (
                 <div style={{ background: "rgba(16, 185, 129, 0.05)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: "18px", padding: "20px" }}>
                   <div style={{ display: "flex", gap: "8px", alignItems: "center", color: "var(--success)", fontWeight: "700", fontSize: "14px", marginBottom: "16px" }}>
-                  <IndianRupee size={18} />
-                  <span>Refund Bank Account Details</span>
-                </div>
+                    <IndianRupee size={18} />
+                    <span>Refund Bank Account Details</span>
+                  </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <label style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)" }}>Beneficiary Holder Name</label>
-                    <input type="text" name="name" value={bankDetails.name} onChange={handleReturnInputChange} required placeholder="Account Holder" className="form-input" style={{ padding: "10px 14px", fontSize: "13px" }} />
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <label style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)" }}>Account Number</label>
-                    <input type="text" name="accNo" value={bankDetails.accNo} onChange={handleReturnInputChange} required placeholder="Account Number" className="form-input" style={{ padding: "10px 14px", fontSize: "13px" }} />
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <label style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)" }}>Bank Name</label>
-                    <input type="text" name="bankName" value={bankDetails.bankName} onChange={handleReturnInputChange} required placeholder="e.g. HDFC Bank" className="form-input" style={{ padding: "10px 14px", fontSize: "13px" }} />
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <label style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)" }}>IFSC Code</label>
-                    <input type="text" name="ifsc" value={bankDetails.ifsc} onChange={handleReturnInputChange} required placeholder="e.g. HDFC0001234" className="form-input" style={{ padding: "10px 14px", fontSize: "13px" }} />
-                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)" }}>Beneficiary Holder Name</label>
+                      <input type="text" name="name" value={bankDetails.name} onChange={handleReturnInputChange} required placeholder="Account Holder" className="form-input" style={{ padding: "10px 14px", fontSize: "13px" }} />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)" }}>Account Number</label>
+                      <input type="text" name="accNo" value={bankDetails.accNo} onChange={handleReturnInputChange} required placeholder="Account Number" className="form-input" style={{ padding: "10px 14px", fontSize: "13px" }} />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)" }}>Bank Name</label>
+                      <input type="text" name="bankName" value={bankDetails.bankName} onChange={handleReturnInputChange} required placeholder="e.g. HDFC Bank" className="form-input" style={{ padding: "10px 14px", fontSize: "13px" }} />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <label style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)" }}>IFSC Code</label>
+                      <input type="text" name="ifsc" value={bankDetails.ifsc} onChange={handleReturnInputChange} required placeholder="e.g. HDFC0001234" className="form-input" style={{ padding: "10px 14px", fontSize: "13px" }} />
+                    </div>
                   </div>
                 </div>
               )}
@@ -624,6 +771,182 @@ export default function Dashboard() {
                   style={{ flexGrow: 1 }}
                 >
                   {submittingReturn ? "Submitting..." : "Submit Request"}
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EXCHANGE REQUEST POPUP MODAL */}
+      {exchangeOrder && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(15, 23, 42, 0.6)",
+          backdropFilter: "blur(4px)",
+          zIndex: 2000,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "20px"
+        }}>
+          <div className="glass-card" style={{
+            width: "100%",
+            maxWidth: "600px",
+            background: "var(--bg-card)",
+            padding: "32px",
+            maxHeight: "90vh",
+            overflowY: "auto",
+            display: "flex",
+            flexDirection: "column",
+            gap: "24px"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-color)", paddingBottom: "16px" }}>
+              <div>
+                <h3 style={{ fontSize: "20px", fontWeight: "800" }}>Request Exchange</h3>
+                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Order Reference: #{exchangeOrder.id}</span>
+              </div>
+              <button onClick={() => setExchangeOrder(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitExchange} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+
+              {/* Items Selection */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <label style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-muted)" }}>Select Items to Exchange & New Size</label>
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px", border: "1px solid var(--border-color)", borderRadius: "12px", padding: "16px", background: "rgba(0,0,0,0.02)" }}>
+                  {exchangeOrder.products?.map((prod, i) => {
+                    const isSelected = exchangeItems.some(item => item.id === prod.id && item.variantKey === prod.variantKey);
+                    const selectedExchangeItem = exchangeItems.find(item => item.id === prod.id && item.variantKey === prod.variantKey);
+                    const prodId = prod.productid || prod.id;
+                    const availableVariants = productVariantsCache[prodId] || [];
+
+                    return (
+                      <div key={i} style={{ display: "flex", flexDirection: "column", gap: "12px", borderBottom: i < exchangeOrder.products.length - 1 ? "1px solid var(--border-color)" : "none", paddingBottom: i < exchangeOrder.products.length - 1 ? "12px" : "0" }}>
+                        <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleExchangeItem(prod)}
+                            style={{ marginTop: "4px" }}
+                          />
+                          <div style={{ flexGrow: 1 }}>
+                            <div style={{ fontSize: "14px", fontWeight: "700" }}>{prod.name}</div>
+                            <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                              Current Size: {prod.variantSize || "Standard"} | Qty: {prod.quantity}
+                            </div>
+                          </div>
+                        </label>
+
+                        {isSelected && availableVariants.length > 0 && (
+                          <div style={{ marginLeft: "28px", padding: "12px", background: "var(--bg-card)", borderRadius: "8px", border: "1px solid var(--primary-glow)" }}>
+                            <label style={{ fontSize: "12px", fontWeight: "700", color: "var(--primary)", display: "block", marginBottom: "6px" }}>Select New Size (Optional)</label>
+                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                              {availableVariants.map((v, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  disabled={Number(v.stock) <= 0}
+                                  onClick={() => handleExchangeVariantSelect(prod.id, prod.variantKey, v)}
+                                  style={{
+                                    padding: "6px 12px",
+                                    borderRadius: "8px",
+                                    fontSize: "12px",
+                                    fontWeight: "600",
+                                    border: selectedExchangeItem?.newVariantSku === v.sku ? "2px solid var(--primary)" : "1px solid var(--border-color)",
+                                    background: selectedExchangeItem?.newVariantSku === v.sku ? "var(--primary-glow)" : "var(--bg-card)",
+                                    color: Number(v.stock) <= 0 ? "var(--text-muted)" : "var(--text-main)",
+                                    cursor: Number(v.stock) <= 0 ? "not-allowed" : "pointer",
+                                    opacity: Number(v.stock) <= 0 ? 0.5 : 1
+                                  }}
+                                >
+                                  {v.size} {Number(v.stock) <= 0 && "(Out of Stock)"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Exchange Details */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-muted)" }}>Reason for Exchange</label>
+                <select
+                  value={exchangeReason}
+                  onChange={(e) => setExchangeReason(e.target.value)}
+                  style={{
+                    padding: "12px",
+                    borderRadius: "12px",
+                    border: "1px solid var(--border-color)",
+                    background: "var(--bg-card)",
+                    color: "var(--text-main)",
+                    outline: "none"
+                  }}
+                >
+                  <option value="Size Issue">Size Issue (Too big/small)</option>
+                  <option value="Defective / Quality issues">Defective / Poor Quality issues</option>
+                  <option value="Wrong Item Delivered">Wrong Item / Color Delivered</option>
+                  <option value="Item not as described">Item not matching descriptions</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-muted)" }}>Detailed Comments</label>
+                <textarea
+                  value={exchangeComments}
+                  onChange={(e) => setExchangeComments(e.target.value)}
+                  placeholder="Explain the issue details..."
+                  rows="3"
+                  className="form-input"
+                  style={{ resize: "none" }}
+                  required
+                />
+              </div>
+
+              {/* Photo Proof */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-muted)" }}>Image Proof (Required)</label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      if (e.target.files[0]) {
+                        setExchangeImageFile(e.target.files[0]);
+                      }
+                    }}
+                    required={!exchangeImageFile}
+                    className="form-input"
+                    style={{ paddingLeft: "44px", paddingTop: "8px", paddingBottom: "8px" }}
+                  />
+                  <Camera size={16} style={{ position: "absolute", left: "16px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+                </div>
+                {exchangeImageFile && <span style={{ fontSize: "12px", color: "var(--primary)", fontWeight: "600", marginTop: "4px" }}>Selected: {exchangeImageFile.name}</span>}
+                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Please upload a clear photo showing the item defect or size label.</span>
+              </div>
+
+              {/* Submit Buttons */}
+              <div style={{ display: "flex", gap: "16px", marginTop: "12px", borderTop: "1px solid var(--border-color)", paddingTop: "16px" }}>
+                <button type="button" onClick={() => setExchangeOrder(null)} className="btn btn-secondary" style={{ flexGrow: 1 }} disabled={submittingExchange}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingExchange || exchangeItems.length === 0}
+                  className="btn btn-primary"
+                  style={{ flexGrow: 1 }}
+                >
+                  {submittingExchange ? "Submitting..." : "Submit Exchange Request"}
                 </button>
               </div>
 

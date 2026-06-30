@@ -62,62 +62,73 @@ export function WishlistProvider({ children }) {
         } catch (err) {
           console.error("Error syncing wishlist with Firestore:", err);
         }
+      } else {
+        setWishlist([]);
       }
     });
 
     return () => unsubscribe();
   }, []);
 
-  const addToWishlist = (product) => {
+  const addToWishlist = async (product) => {
     setWishlist((prev) => {
       if (prev.some((item) => item.id === product.id)) return prev;
+      return [...prev, product];
+    });
 
+    if (auth.currentUser) {
+      const favData = {
+        favoriteId: product.id,
+        productid: product.id,
+        customerId: auth.currentUser.uid
+      };
+      try {
+        await setDoc(doc(db, "users", auth.currentUser.uid, "favorites", product.id), favData);
+      } catch (err) {
+        console.error("Firestore add to favorites error:", err);
+      }
+    }
+  };
+
+  const removeFromWishlist = async (id) => {
+    if (auth.currentUser) {
+      try {
+        await deleteDoc(doc(db, "users", auth.currentUser.uid, "favorites", id));
+      } catch (err) {
+        console.error("Firestore delete from favorites error:", id, err);
+        return; // Exit if failed, keeping state intact
+      }
+    }
+    setWishlist((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const toggleWishlist = async (product) => {
+    const exists = wishlist.some((item) => item.id === product.id);
+    if (exists) {
+      if (auth.currentUser) {
+        try {
+          await deleteDoc(doc(db, "users", auth.currentUser.uid, "favorites", product.id));
+        } catch (err) {
+          console.error("Firestore delete from favorites error:", product.id, err);
+          return;
+        }
+      }
+      setWishlist((prev) => prev.filter((item) => item.id !== product.id));
+    } else {
+      setWishlist((prev) => [...prev, product]);
       if (auth.currentUser) {
         const favData = {
           favoriteId: product.id,
           productid: product.id,
           customerId: auth.currentUser.uid
         };
-        setDoc(doc(db, "users", auth.currentUser.uid, "favorites", product.id), favData)
-          .catch(err => console.error("Firestore add to favorites error:", err));
-      }
-
-      return [...prev, product];
-    });
-  };
-
-  const removeFromWishlist = (id) => {
-    setWishlist((prev) => {
-      if (auth.currentUser) {
-        deleteDoc(doc(db, "users", auth.currentUser.uid, "favorites", id))
-          .catch(err => console.error("Firestore delete from favorites error:", id, err));
-      }
-      return prev.filter((item) => item.id !== id);
-    });
-  };
-
-  const toggleWishlist = (product) => {
-    setWishlist((prev) => {
-      const exists = prev.some((item) => item.id === product.id);
-      if (exists) {
-        if (auth.currentUser) {
-          deleteDoc(doc(db, "users", auth.currentUser.uid, "favorites", product.id))
-            .catch(err => console.error("Firestore delete from favorites error:", product.id, err));
+        try {
+          await setDoc(doc(db, "users", auth.currentUser.uid, "favorites", product.id), favData);
+        } catch (err) {
+          console.error("Firestore add to favorites error:", err);
         }
-        return prev.filter((item) => item.id !== product.id);
-      } else {
-        if (auth.currentUser) {
-          const favData = {
-            favoriteId: product.id,
-            productid: product.id,
-            customerId: auth.currentUser.uid
-          };
-          setDoc(doc(db, "users", auth.currentUser.uid, "favorites", product.id), favData)
-            .catch(err => console.error("Firestore add to favorites error:", err));
-        }
-        return [...prev, product];
       }
-    });
+    }
   };
 
   const isInWishlist = (id) => {
