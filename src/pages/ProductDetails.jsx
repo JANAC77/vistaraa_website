@@ -11,7 +11,7 @@ export default function ProductDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart } = useCart();
-  const { toggleWishlist, isInWishlist } = useWishlist();
+  const { toggleWishlist, isInWishlist, removeFromWishlist } = useWishlist();
 
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -145,6 +145,12 @@ export default function ProductDetails() {
   const handleAddToCart = () => {
     if (isOutOfStock) return;
     addToCart(product, selectedVariant, quantity);
+    
+    // Remove from wishlist if present
+    if (isInWishlist(product.id)) {
+      removeFromWishlist(product.id);
+    }
+
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
   };

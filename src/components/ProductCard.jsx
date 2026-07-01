@@ -7,7 +7,7 @@ import { getPlaceholderImage } from "../utils/placeholder";
 
 export default function ProductCard({ product }) {
   const { addToCart } = useCart();
-  const { toggleWishlist, isInWishlist } = useWishlist();
+  const { toggleWishlist, isInWishlist, removeFromWishlist } = useWishlist();
 
   const getProductImage = (p) => {
     if (!p?.images?.length) return getPlaceholderImage(400, 400, "Vistaraa Product");
@@ -30,6 +30,11 @@ export default function ProductCard({ product }) {
     // Add default variant or none
     const defaultVariant = product.variants?.length > 0 ? product.variants[0] : null;
     addToCart(product, defaultVariant, 1);
+
+    // Remove from wishlist if present
+    if (isInWishlist(product.id)) {
+      removeFromWishlist(product.id);
+    }
 
     // Quick notification animation or alert
     const target = e.currentTarget;
