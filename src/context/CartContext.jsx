@@ -30,64 +30,66 @@ export function CartProvider({ children }) {
           // 1. Fetch current cart from Firestore
           const cartRef = collection(db, "users", user.uid, "cart");
           const snap = await getDocs(cartRef);
-          const rawFirestoreCart = snap.docs.map(doc => doc.data());
+          const rawFirestoreCart = snap.docs.map(doc => ({ ...doc.data(), docId: doc.id }));
 
-          // Resolve product details for any items fetched from Firestore (e.g. added by the mobile app)
+          // Resolve product details for ALL items fetched from Firestore to stay in sync
           const firestoreCart = [];
           for (const item of rawFirestoreCart) {
-            let resolvedItem = { ...item };
-            if (!resolvedItem.name || resolvedItem.salePrice === undefined || resolvedItem.salePrice === null) {
-              try {
-                const docRef = doc(db, "products", resolvedItem.productid);
-                const prodDoc = await getDoc(docRef);
-                if (prodDoc.exists()) {
-                  const productData = prodDoc.data();
-                  const getProductImage = (p) => {
-                    if (!p?.images?.length) return getPlaceholderImage(400, 400, "Product");
-                    const primary = p.images.find(img => img.isPrimary);
-                    return primary?.url || p.images[0]?.url;
-                  };
+            try {
+              const docRef = doc(db, "products", item.productid);
+              const prodDoc = await getDoc(docRef);
+              
+              if (prodDoc.exists()) {
+                const productData = prodDoc.data();
+                const getProductImage = (p) => {
+                  if (!p?.images?.length) return getPlaceholderImage(400, 400, "Product");
+                  const primary = p.images.find(img => img.isPrimary);
+                  return primary?.url || p.images[0]?.url;
+                };
 
-                  const selectedSize = resolvedItem.sizeVariant?.size;
-                  let selectedVariant = null;
-                  if (selectedSize && productData.sizeVariants) {
-                    selectedVariant = productData.sizeVariants.find(sv => sv.size === selectedSize);
-                  }
-
-                  const priceToUse = selectedVariant ? Number(selectedVariant.price) : Number(productData.salePrice || productData.price || 0);
-
-                  resolvedItem = {
-                    ...resolvedItem,
-                    id: resolvedItem.productid,
-                    name: productData.name || "Product",
-                    price: Number(productData.price || 0),
-                    salePrice: Number(priceToUse) || 0,
-                    image: getProductImage(productData),
-                    sku: selectedVariant ? selectedVariant.sku : (productData.sku || resolvedItem.productid),
-                    variantKey: selectedSize || "default",
-                    variantSize: selectedSize || null,
-                    sellerId: productData.sellerId || "default"
-                  };
-                } else {
-                  // Set default fallbacks if product doesn't exist
-                  resolvedItem = {
-                    ...resolvedItem,
-                    id: resolvedItem.productid,
-                    name: resolvedItem.name || "Product",
-                    price: Number(resolvedItem.price || 0),
-                    salePrice: Number(resolvedItem.salePrice || 0),
-                    image: resolvedItem.image || getPlaceholderImage(400, 400, "Product"),
-                    sku: resolvedItem.sku || resolvedItem.productid,
-                    variantKey: resolvedItem.variantKey || "default",
-                    variantSize: resolvedItem.variantSize || null,
-                    sellerId: resolvedItem.sellerId || "default"
-                  };
+                const selectedSize = item.sizeVariant?.size || item.variantSize;
+                let selectedVariant = null;
+                if (selectedSize && productData.sizeVariants) {
+                  selectedVariant = productData.sizeVariants.find(sv => sv.size === selectedSize);
                 }
-              } catch (prodErr) {
-                console.error(`Error fetching product details for cart item ${resolvedItem.productid}:`, prodErr);
+
+                const priceToUse = selectedVariant ? Number(selectedVariant.price) : Number(productData.salePrice || productData.price || 0);
+
+                const resolvedItem = {
+                  ...item,
+                  id: item.productid,
+                  name: productData.name || "Product",
+                  price: Number(productData.price || 0),
+                  salePrice: Number(priceToUse) || 0,
+                  image: getProductImage(productData),
+                  sku: selectedVariant ? selectedVariant.sku : (productData.sku || item.productid),
+                  variantKey: selectedSize || "default",
+                  variantSize: selectedSize || null,
+                  sellerId: productData.sellerId || "default"
+                };
+                
+                // If the product data changed, we should update the cart document in Firestore too
+                if (
+                  item.name !== resolvedItem.name || 
+                  item.price !== resolvedItem.price || 
+                  item.salePrice !== resolvedItem.salePrice || 
+                  item.image !== resolvedItem.image
+                ) {
+                  const updateRef = doc(db, "users", user.uid, "cart", item.cartId || item.id);
+                  updateDoc(updateRef, resolvedItem).catch(e => console.error("Self-healing: failed to sync cart item:", e));
+                }
+                
+                firestoreCart.push(resolvedItem);
+              } else {
+                // Product no longer exists, remove from cart
+                const delRef = doc(db, "users", user.uid, "cart", item.docId);
+                deleteDoc(delRef).catch(e => console.error("Self-healing: failed to delete orphaned cart item:", e));
+                console.log(`Self-healing: deleted cart item ${item.docId} because product no longer exists.`);
               }
+            } catch (prodErr) {
+              console.error(`Error fetching product details for cart item ${item.productid}:`, prodErr);
+              firestoreCart.push(item); // Fallback to stale data if error
             }
-            firestoreCart.push(resolvedItem);
           }
 
           // 2. Merge local storage cart into Firestore
@@ -132,7 +134,7 @@ export function CartProvider({ children }) {
             const key = item.variantKey ? `${item.id}_${item.variantKey}` : item.id;
             if (deduplicatedCartMap[key]) {
               deduplicatedCartMap[key].quantity += (Number(item.quantity) || 1);
-              duplicateDocsToDelete.push({ docId: item.cartId || item.id, parentKey: key });
+              duplicateDocsToDelete.push({ docId: item.docId || item.cartId || item.id, parentKey: key });
             } else {
               deduplicatedCartMap[key] = { ...item };
             }
@@ -256,9 +258,10 @@ export function CartProvider({ children }) {
     if (auth.currentUser) {
       try {
         await deleteDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId));
+        // Legacy document cleanup just in case
+        await deleteDoc(doc(db, "users", auth.currentUser.uid, "cart", id)).catch(() => {});
       } catch (err) {
         console.error("Firestore delete from cart error:", err);
-        return; // Exit if failed, keeping state intact
       }
     }
     setCart((prevCart) => prevCart.filter((item) => !(item.id === id && item.variantKey === variantKey)));
@@ -275,9 +278,12 @@ export function CartProvider({ children }) {
         await updateDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId), {
           quantity: Number(quantity)
         });
+        // Try updating legacy ID if it exists
+        await updateDoc(doc(db, "users", auth.currentUser.uid, "cart", id), {
+          quantity: Number(quantity)
+        }).catch(() => {});
       } catch (err) {
         console.error("Firestore update cart quantity error:", err);
-        return;
       }
     }
     setCart((prevCart) => prevCart.map((item) =>

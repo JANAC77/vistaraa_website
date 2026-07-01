@@ -26,7 +26,7 @@ export function WishlistProvider({ children }) {
           // 1. Fetch current favorites from Firestore
           const favRef = collection(db, "users", user.uid, "favorites");
           const snap = await getDocs(favRef);
-          const firestoreFavs = snap.docs.map(doc => doc.data());
+          const firestoreFavs = snap.docs.map(doc => ({ ...doc.data(), docId: doc.id }));
 
           // 2. Fetch full product details for each firestore favorite item
           const fetchedProducts = [];
@@ -36,6 +36,12 @@ export function WishlistProvider({ children }) {
               const prodDoc = await getDoc(docRef);
               if (prodDoc.exists()) {
                 fetchedProducts.push({ id: prodDoc.id, ...prodDoc.data() });
+              } else {
+                try {
+                  await deleteDoc(doc(db, "users", user.uid, "favorites", fav.docId || fav.productid));
+                } catch (e) {
+                  console.error("Failed to delete orphaned favorite:", e);
+                }
               }
             }
           }
@@ -96,7 +102,6 @@ export function WishlistProvider({ children }) {
         await deleteDoc(doc(db, "users", auth.currentUser.uid, "favorites", id));
       } catch (err) {
         console.error("Firestore delete from favorites error:", id, err);
-        return; // Exit if failed, keeping state intact
       }
     }
     setWishlist((prev) => prev.filter((item) => item.id !== id));
@@ -110,7 +115,6 @@ export function WishlistProvider({ children }) {
           await deleteDoc(doc(db, "users", auth.currentUser.uid, "favorites", product.id));
         } catch (err) {
           console.error("Firestore delete from favorites error:", product.id, err);
-          return;
         }
       }
       setWishlist((prev) => prev.filter((item) => item.id !== product.id));

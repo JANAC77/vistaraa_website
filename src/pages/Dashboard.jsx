@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
-import { collection, getDocs, getDoc, doc, setDoc, updateDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, getDoc, doc, setDoc, updateDoc, serverTimestamp, query, orderBy, onSnapshot } from "firebase/firestore";
 import { Package, RotateCcw, RefreshCcw, Clock, CheckCircle, ShieldAlert, X, IndianRupee, Camera, Eye } from "lucide-react";
 import { getPlaceholderImage } from "../utils/placeholder";
 
@@ -36,30 +36,48 @@ export default function Dashboard() {
   const [productVariantsCache, setProductVariantsCache] = useState({});
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
+    let unsubscribeOrders = null;
+    const unsubscribeAuth = auth.onAuthStateChanged((currentUser) => {
       if (!currentUser) {
         navigate("/auth");
         return;
       }
       setUser(currentUser);
-      await fetchOrders(currentUser.uid);
+      unsubscribeOrders = setupOrdersListener(currentUser.uid);
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeOrders) unsubscribeOrders();
+    };
   }, [navigate]);
 
-  const fetchOrders = async (uid) => {
-    try {
-      setLoading(true);
-      const ordersRef = collection(db, "users", uid, "orders");
-      // Fallback query without orderBy if index is not ready
-      let snap;
-      try {
-        snap = await getDocs(query(ordersRef, orderBy("createdAt", "desc")));
-      } catch (err) {
-        console.warn("Index not ready yet, falling back to unordered fetch:", err);
-        snap = await getDocs(ordersRef);
+  const setupOrdersListener = (uid) => {
+    setLoading(true);
+    const ordersRef = collection(db, "users", uid, "orders");
+    
+    // Try to listen with orderBy. If it fails, fallback to unordered.
+    // Note: onSnapshot errors cannot be caught with try/catch, they are passed to the error callback.
+    let q = query(ordersRef, orderBy("createdAt", "desc"));
+    
+    const unsubscribe = onSnapshot(q, (snap) => {
+      processSnapshot(snap, uid);
+    }, (err) => {
+      if (err.message.includes("index")) {
+        console.warn("Index not ready yet, falling back to unordered real-time listener:", err);
+        const fallbackUnsubscribe = onSnapshot(ordersRef, (fallbackSnap) => {
+          processSnapshot(fallbackSnap, uid);
+        });
+        return fallbackUnsubscribe;
+      } else {
+        console.error("Error in real-time orders listener:", err);
+        setLoading(false);
       }
+    });
+    
+    return unsubscribe;
+  };
 
+  const processSnapshot = (snap, uid) => {
       const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       // Sort manually as fallback
       data.sort((a, b) => {
@@ -209,20 +227,13 @@ export default function Dashboard() {
       }
 
       setOrders(repairedData);
-    } catch (error) {
-      console.error("Error fetching orders:", error);
-    } finally {
       setLoading(false);
-    }
   };
 
   const checkReturnEligibility = (order) => {
     const status = (order.orderStatus || order.status || "").toLowerCase();
-    const ineligibleStatuses = [
-      "return_requested", "refunded", "return_approved", "cancelled",
-      "exchange_requested", "exchange_approved", "forward_shipped"
-    ];
-    if (ineligibleStatuses.includes(status)) {
+    
+    if (status !== "delivered" && status !== "completed") {
       return false;
     }
 
@@ -256,7 +267,6 @@ export default function Dashboard() {
       if (!response.ok) throw new Error(data.error || "Failed to cancel order");
 
       alert("Order cancelled successfully.");
-      fetchOrders();
     } catch (error) {
       console.error(error);
       alert(error.message);
@@ -358,9 +368,6 @@ export default function Dashboard() {
       setBankDetails({ name: "", accNo: "", bankName: "", ifsc: "" });
       setImageLink("");
       setImageFile(null);
-
-      // Refresh order list
-      await fetchOrders(user.uid);
     } catch (error) {
       console.error("Return submission failed:", error);
       alert("Failed to submit return request. Please try again.");
@@ -501,8 +508,6 @@ export default function Dashboard() {
       setExchangeComments("");
       setExchangeItems([]);
       setExchangeImageFile(null);
-      await fetchOrders(user.uid);
-
     } catch (error) {
       console.error("Exchange submission failed:", error);
       alert(error.message);
