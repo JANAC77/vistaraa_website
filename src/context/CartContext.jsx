@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { getPlaceholderImage } from "../utils/placeholder";
 import { auth, db } from "../firebase";
-import { doc, collection, getDocs, getDoc, setDoc, deleteDoc, updateDoc } from "firebase/firestore";
+import { doc, collection, getDocs, getDoc, setDoc, deleteDoc, updateDoc, query, where } from "firebase/firestore";
 
 const CartContext = createContext();
 
@@ -211,6 +211,13 @@ export function CartProvider({ children }) {
     if (existingIndex > -1) {
       const newQty = cart[existingIndex].quantity + quantity;
 
+      // Optimistic UI update
+      setCart(prevCart => {
+        const updated = [...prevCart];
+        updated[existingIndex].quantity = newQty;
+        return updated;
+      });
+
       if (auth.currentUser) {
         try {
           await updateDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId), {
@@ -220,14 +227,11 @@ export function CartProvider({ children }) {
           console.error("Firestore update cart quantity error:", err);
         }
       }
-
-      setCart(prevCart => {
-        const updated = [...prevCart];
-        updated[existingIndex].quantity = newQty;
-        return updated;
-      });
       return;
     }
+
+    // Optimistic UI update
+    setCart(prevCart => [...prevCart, newItem]);
 
     if (auth.currentUser) {
       const mapped = {
@@ -249,22 +253,32 @@ export function CartProvider({ children }) {
         console.error("Firestore add to cart error:", err);
       }
     }
-
-    setCart(prevCart => [...prevCart, newItem]);
   };
 
   const removeFromCart = async (id, variantKey) => {
     const cartId = `${id}_${variantKey}`;
+    // Optimistic UI update
+    setCart((prevCart) => prevCart.filter((item) => !(item.id === id && item.variantKey === variantKey)));
+    
     if (auth.currentUser) {
       try {
         await deleteDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId));
         // Legacy document cleanup just in case
         await deleteDoc(doc(db, "users", auth.currentUser.uid, "cart", id)).catch(() => {});
+        
+        const cartRef = collection(db, "users", auth.currentUser.uid, "cart");
+        const q = query(cartRef, where("productid", "==", id));
+        const snap = await getDocs(q);
+        snap.forEach(d => {
+          const data = d.data();
+          if ((data.variantKey || "default") === variantKey || data.variantKey === undefined) {
+             deleteDoc(d.ref).catch(()=>{});
+          }
+        });
       } catch (err) {
         console.error("Firestore delete from cart error:", err);
       }
     }
-    setCart((prevCart) => prevCart.filter((item) => !(item.id === id && item.variantKey === variantKey)));
   };
 
   const updateQuantity = async (id, variantKey, quantity) => {
@@ -273,6 +287,12 @@ export function CartProvider({ children }) {
       return;
     }
     const cartId = `${id}_${variantKey}`;
+    
+    // Optimistic UI update
+    setCart((prevCart) => prevCart.map((item) =>
+      item.id === id && item.variantKey === variantKey ? { ...item, quantity } : item
+    ));
+
     if (auth.currentUser) {
       try {
         await updateDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId), {
@@ -286,23 +306,23 @@ export function CartProvider({ children }) {
         console.error("Firestore update cart quantity error:", err);
       }
     }
-    setCart((prevCart) => prevCart.map((item) =>
-      item.id === id && item.variantKey === variantKey ? { ...item, quantity } : item
-    ));
   };
 
   const clearCart = async () => {
+    // Optimistic UI update
+    setCart([]);
+    
     if (auth.currentUser) {
-      for (const item of cart) {
-        const cartId = item.variantKey ? `${item.id}_${item.variantKey}` : item.id;
-        try {
-          await deleteDoc(doc(db, "users", auth.currentUser.uid, "cart", cartId));
-        } catch (err) {
-          console.error("Firestore clear cart item error:", err);
-        }
+      try {
+        const cartRef = collection(db, "users", auth.currentUser.uid, "cart");
+        const snap = await getDocs(cartRef);
+        snap.forEach(d => {
+          deleteDoc(d.ref).catch(()=>{});
+        });
+      } catch (err) {
+        console.error("Firestore clear cart error:", err);
       }
     }
-    setCart([]);
   };
 
   const cartTotal = cart.reduce((total, item) => total + item.salePrice * item.quantity, 0);

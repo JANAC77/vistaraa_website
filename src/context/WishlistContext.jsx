@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { auth, db } from "../firebase";
-import { doc, collection, getDocs, getDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { doc, collection, getDocs, getDoc, setDoc, deleteDoc, query, where } from "firebase/firestore";
 
 const WishlistContext = createContext();
 
@@ -28,17 +28,28 @@ export function WishlistProvider({ children }) {
           const snap = await getDocs(favRef);
           const firestoreFavs = snap.docs.map(doc => ({ ...doc.data(), docId: doc.id }));
 
-          // 2. Fetch full product details for each firestore favorite item
+          // 2. Fetch full product details and normalize legacy IDs
           const fetchedProducts = [];
           for (const fav of firestoreFavs) {
             if (fav.productid) {
+              // Self-healing: Normalize document ID
+              if (fav.docId !== fav.productid) {
+                console.log(`Self-healing: Normalizing wishlist doc ${fav.docId} -> ${fav.productid}`);
+                await setDoc(doc(db, "users", user.uid, "favorites", fav.productid), {
+                  favoriteId: fav.productid,
+                  productid: fav.productid,
+                  customerId: user.uid
+                });
+                await deleteDoc(doc(db, "users", user.uid, "favorites", fav.docId)).catch(() => {});
+              }
+
               const docRef = doc(db, "products", fav.productid);
               const prodDoc = await getDoc(docRef);
               if (prodDoc.exists()) {
                 fetchedProducts.push({ id: prodDoc.id, ...prodDoc.data() });
               } else {
                 try {
-                  await deleteDoc(doc(db, "users", user.uid, "favorites", fav.docId || fav.productid));
+                  await deleteDoc(doc(db, "users", user.uid, "favorites", fav.productid));
                 } catch (e) {
                   console.error("Failed to delete orphaned favorite:", e);
                 }
@@ -97,19 +108,30 @@ export function WishlistProvider({ children }) {
   };
 
   const removeFromWishlist = async (id) => {
+    // Optimistic UI update
+    setWishlist((prev) => prev.filter((item) => item.id !== id));
+    
     if (auth.currentUser) {
       try {
         await deleteDoc(doc(db, "users", auth.currentUser.uid, "favorites", id));
+        const favRef = collection(db, "users", auth.currentUser.uid, "favorites");
+        const q = query(favRef, where("productid", "==", id));
+        const snap = await getDocs(q);
+        snap.forEach(d => {
+           deleteDoc(d.ref).catch(()=>{});
+        });
       } catch (err) {
         console.error("Firestore delete from favorites error:", id, err);
       }
     }
-    setWishlist((prev) => prev.filter((item) => item.id !== id));
   };
 
   const toggleWishlist = async (product) => {
     const exists = wishlist.some((item) => item.id === product.id);
     if (exists) {
+      // Optimistic UI update
+      setWishlist((prev) => prev.filter((item) => item.id !== product.id));
+      
       if (auth.currentUser) {
         try {
           await deleteDoc(doc(db, "users", auth.currentUser.uid, "favorites", product.id));
@@ -117,9 +139,10 @@ export function WishlistProvider({ children }) {
           console.error("Firestore delete from favorites error:", product.id, err);
         }
       }
-      setWishlist((prev) => prev.filter((item) => item.id !== product.id));
     } else {
+      // Optimistic UI update
       setWishlist((prev) => [...prev, product]);
+      
       if (auth.currentUser) {
         const favData = {
           favoriteId: product.id,
