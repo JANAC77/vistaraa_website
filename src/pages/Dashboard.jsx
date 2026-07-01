@@ -911,8 +911,8 @@ export default function Dashboard() {
                 <label style={{ fontSize: "13px", fontWeight: "700", color: "var(--text-muted)" }}>Select Items to Exchange & New Size</label>
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", border: "1px solid var(--border-color)", borderRadius: "12px", padding: "16px", background: "rgba(0,0,0,0.02)" }}>
                   {exchangeOrder.products?.map((prod, i) => {
-                    const isSelected = exchangeItems.some(item => item.id === prod.id && item.variantKey === prod.variantKey);
-                    const selectedExchangeItem = exchangeItems.find(item => item.id === prod.id && item.variantKey === prod.variantKey);
+                    const isSelected = exchangeItems.some(item => item.id === prod.id && item.variantKey === (prod.variantSize || 'default'));
+                    const selectedExchangeItem = exchangeItems.find(item => item.id === prod.id && item.variantKey === (prod.variantSize || 'default'));
                     const prodId = prod.productid || prod.id;
                     const availableVariants = productVariantsCache[prodId] || [];
                     const isAlreadyRequested = prod.returnStatus || prod.exchangeStatus;

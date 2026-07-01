@@ -36,6 +36,7 @@ export default function Checkout() {
   const [placedOrderId, setPlacedOrderId] = useState("");
   const [detectingLocation, setDetectingLocation] = useState(false);
   const [sellerData, setSellerData] = useState(null);
+  const [orderedItems, setOrderedItems] = useState([]);
 
   useEffect(() => {
     const fetchSeller = async () => {
@@ -411,6 +412,7 @@ export default function Checkout() {
 
     // 3. Complete checkout states
     setPlacedOrderId(orderId);
+    setOrderedItems([...checkoutItems]);
     setOrderPlaced(true);
     if (!buyNowItem) {
       clearCart();
@@ -525,9 +527,9 @@ export default function Checkout() {
                 : "Thank you for shopping with Vistaraa. Your payment was processed successfully."}
             </p>
 
-            {checkoutItems.length > 0 && (
+            {orderedItems.length > 0 && (
               <div style={{ display: "flex", gap: "12px", justifyContent: "center", marginBottom: "24px", flexWrap: "wrap" }}>
-                {checkoutItems.map((item, idx) => (
+                {orderedItems.map((item, idx) => (
                   <div key={idx} style={{
                     width: "64px",
                     height: "64px",
