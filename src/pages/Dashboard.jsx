@@ -361,11 +361,21 @@ export default function Dashboard() {
 
       const allReturnedOrExchanged = updatedProducts.every(p => p.returnStatus || p.exchangeStatus);
 
-      await updateDoc(orderRef, {
+      const orderUpdateData = {
         products: updatedProducts,
         orderStatus: allReturnedOrExchanged ? "return_requested" : "partial_return_requested",
         status: allReturnedOrExchanged ? "RETURN_REQUESTED" : "PARTIAL_RETURN"
-      });
+      };
+
+      await updateDoc(orderRef, orderUpdateData);
+
+      // 3. Update root orders collection so admin/seller can see it
+      const rootOrderRef = doc(db, "orders", selectedOrder.id);
+      try {
+        await updateDoc(rootOrderRef, orderUpdateData);
+      } catch (err) {
+        console.warn("Could not update root order:", err);
+      }
 
       alert("Return request submitted successfully. Our admin team will inspect the proof details.");
       setSelectedOrder(null);
@@ -505,11 +515,21 @@ export default function Dashboard() {
 
       // Also update local order document to reflect status
       const orderRef = doc(db, "users", user.uid, "orders", exchangeOrder.id);
-      await updateDoc(orderRef, {
+      const exchangeUpdateData = {
         products: updatedProducts,
         orderStatus: allReturnedOrExchanged ? "exchange_requested" : "partial_exchange_requested",
         status: allReturnedOrExchanged ? "EXCHANGE_REQUESTED" : "PARTIAL_EXCHANGE"
-      });
+      };
+
+      await updateDoc(orderRef, exchangeUpdateData);
+
+      // Also update root orders collection so admin/seller can see it
+      const rootOrderRef = doc(db, "orders", exchangeOrder.id);
+      try {
+        await updateDoc(rootOrderRef, exchangeUpdateData);
+      } catch (err) {
+        console.warn("Could not update root order:", err);
+      }
 
       alert("Exchange request submitted successfully!");
       setExchangeOrder(null);
