@@ -5,6 +5,15 @@ import { collection, getDocs, getDoc, doc, setDoc, updateDoc, serverTimestamp, q
 import { Package, RotateCcw, RefreshCcw, Clock, CheckCircle, ShieldAlert, X, IndianRupee, Camera, Eye } from "lucide-react";
 import { getPlaceholderImage } from "../utils/placeholder";
 
+const formatStatus = (status) => {
+  if (!status) return "";
+  return status
+    .replace(/_/g, ' ')
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -568,11 +577,11 @@ export default function Dashboard() {
                     </div>
 
                     <div>
-                      <span className={`badge ${order.orderStatus === "refunded" ? "badge-out" :
-                        (order.orderStatus === "return_approved" ? "badge-new" :
-                          (order.orderStatus === "return_requested" ? "badge-sale" : "badge-new"))
+                      <span className={`badge ${(order.orderStatus || "").toLowerCase() === "refunded" ? "badge-out" :
+                        ((order.orderStatus || "").toLowerCase() === "return_approved" ? "badge-new" :
+                          ((order.orderStatus || "").toLowerCase() === "return_requested" ? "badge-sale" : "badge-new"))
                         }`} style={{ fontSize: "11px", padding: "6px 12px", borderRadius: "8px" }}>
-                        {order.orderStatus ? order.orderStatus.replace('_', ' ') : (order.status || "Placed")}
+                        {order.orderStatus ? formatStatus(order.orderStatus) : formatStatus(order.status || "Placed")}
                       </span>
                     </div>
                   </div>
@@ -592,14 +601,14 @@ export default function Dashboard() {
                           </span>
                           
                           {/* Item Level Badges */}
-                          {prod.returnStatus && (
+                          {prod.returnStatus && (order.orderStatus || "").toLowerCase() !== "refunded" && (order.status || "").toLowerCase() !== "refunded" && (
                             <span className="badge badge-sale" style={{ fontSize: "10px", padding: "4px 8px", borderRadius: "6px", display: "inline-block", marginRight: "6px" }}>
-                              Return: {prod.returnStatus.replace('_', ' ')}
+                              Return: {formatStatus(prod.returnStatus)}
                             </span>
                           )}
                           {prod.exchangeStatus && (
                             <span className="badge badge-new" style={{ fontSize: "10px", padding: "4px 8px", borderRadius: "6px", display: "inline-block" }}>
-                              Exchange: {prod.exchangeStatus.replace('_', ' ')}
+                              Exchange: {formatStatus(prod.exchangeStatus)}
                             </span>
                           )}
                         </div>
