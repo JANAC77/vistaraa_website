@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { auth, db } from "../firebase";
-import { collection, doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, setDoc, getDoc, serverTimestamp, writeBatch, increment } from "firebase/firestore";
 import { ShieldCheck, Truck, CreditCard, ArrowLeft, CheckCircle, MapPin } from "lucide-react";
 import { getPlaceholderImage } from "../utils/placeholder";
 
@@ -359,6 +359,37 @@ export default function Checkout() {
       await setDoc(sellerOrderRef, orderData);
     }
 
+    // 1.7 Deduct stock from products collection
+    try {
+      const batch = writeBatch(db);
+      for (const item of checkoutItems) {
+        const prodRef = doc(db, "products", item.id);
+        const prodSnap = await getDoc(prodRef);
+        if (prodSnap.exists()) {
+          const prodData = prodSnap.data();
+          const itemQty = Number(item.quantity) || 1;
+          
+          let updateObj = { stock: increment(-itemQty) };
+
+          // Update variant stock if applicable
+          if (item.variantSize && prodData.sizeVariants && Array.isArray(prodData.sizeVariants)) {
+            const updatedVariants = prodData.sizeVariants.map(v => {
+              if (v.size === item.variantSize) {
+                return { ...v, stock: Math.max(0, (v.stock || 0) - itemQty) };
+              }
+              return v;
+            });
+            updateObj.sizeVariants = updatedVariants;
+          }
+
+          batch.update(prodRef, updateObj);
+        }
+      }
+      await batch.commit();
+    } catch (stockErr) {
+      console.warn("Failed to update product stock: ", stockErr);
+    }
+
     // 2. Try to sync order with backend / Shiprocket API flow
     try {
       const nameParts = name.trim().split(/\s+/);
@@ -435,6 +466,42 @@ export default function Checkout() {
     }
 
     setLoading(true);
+
+    // Validate Stock
+    for (const item of checkoutItems) {
+      try {
+        const prodSnap = await getDoc(doc(db, "products", item.id));
+        if (prodSnap.exists()) {
+          const prodData = prodSnap.data();
+          const itemQty = Number(item.quantity) || 1;
+          
+          if ((prodData.stock || 0) < itemQty) {
+            alert(`Only ${prodData.stock || 0} units available for ${item.name}.`);
+            setLoading(false);
+            return;
+          }
+          
+          if (item.variantSize && prodData.sizeVariants) {
+            const variant = prodData.sizeVariants.find(v => v.size === item.variantSize);
+            if (variant && ((variant.stock || 0) < itemQty)) {
+              alert(`Only ${variant.stock || 0} units available for ${item.name} (Size: ${item.variantSize}).`);
+              setLoading(false);
+              return;
+            }
+          }
+        } else {
+           alert(`Product ${item.name} not found in inventory.`);
+           setLoading(false);
+           return;
+        }
+      } catch (e) {
+        console.error("Stock validation error: ", e);
+        alert("Error validating stock availability. Please try again.");
+        setLoading(false);
+        return;
+      }
+    }
+
     const finalAmount = checkoutTotal + shippingCharges;
     const orderId = `VIST-${Date.now()}`;
 

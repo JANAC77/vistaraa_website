@@ -125,9 +125,11 @@ export default function ProductDetails() {
     );
   }
 
-  const isOutOfStock = selectedVariant
-    ? Number(selectedVariant.stock) <= 0
-    : Number(product.stock) <= 0;
+  const maxAvailableStock = selectedVariant
+    ? Number(selectedVariant.stock || 0)
+    : Number(product.stock || 0);
+
+  const isOutOfStock = maxAvailableStock <= 0;
 
   const currentPrice = selectedVariant
     ? Number(selectedVariant.price)
@@ -346,8 +348,18 @@ export default function ProductDetails() {
                   </button>
                   <span style={{ width: "32px", textAlign: "center", fontWeight: "700" }}>{quantity}</span>
                   <button
-                    onClick={() => setQuantity(q => q + 1)}
-                    style={{ width: "40px", height: "40px", border: "none", background: "none", cursor: "pointer", fontSize: "18px", fontWeight: "700" }}
+                    onClick={() => setQuantity(q => Math.min(maxAvailableStock, q + 1))}
+                    disabled={quantity >= maxAvailableStock}
+                    style={{ 
+                      width: "40px", 
+                      height: "40px", 
+                      border: "none", 
+                      background: "none", 
+                      cursor: quantity >= maxAvailableStock ? "not-allowed" : "pointer", 
+                      fontSize: "18px", 
+                      fontWeight: "700",
+                      opacity: quantity >= maxAvailableStock ? 0.3 : 1 
+                    }}
                   >
                     +
                   </button>
